@@ -1,0 +1,3108 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<title>NASAV-NET I.A. PANEL v10 • Meteo Tower</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600&family=Quantico:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{
+  --accent:#00e6ff;
+  --glass:rgba(10,16,32,.55);
+  --border:rgba(0,230,255,.25);
+  --text:#e8faff;
+  --bg1:#0a1530;
+  --bg2:#030814;
+  --fire:#ff3030;
+  --fireGlow:#ff5f00;
+  --ok:#27e37f;
+}
+*{box-sizing:border-box}
+html{font-size:98%;}
+html,body{margin:0;height:100%;color:#e8faff;font-family:'Rajdhani',sans-serif;overflow:hidden;}
+
+/* ===================== SFONDO (STATICO, NO ANIMAZIONI) ===================== */
+.bg{
+  position:fixed; inset:0; z-index:0;
+  background:
+    radial-gradient(1200px 800px at 15% -10%, #0a1530, transparent 60%),
+    radial-gradient(1400px 1000px at 90% 120%, #030814, #000 60%);
+}
+.bg::before,
+.bg::after{content:"";position:absolute;inset:0;pointer-events:none}
+
+/* Overlay sfumato coerente (vale per BLU/VERDE/ROSSO perché usa le variabili) */
+.bg::before{
+  background:
+    radial-gradient(900px 600px at 18% 8%,
+      color-mix(in oklab, #00e6ff 35%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(1000px 700px at 85% 65%,
+      color-mix(in oklab, #00e6ff 18%, transparent) 0%,
+      transparent 65%
+    );
+  opacity:1;
+}
+
+/* Sfumatura “fino a metà pagina” (55%) */
+.bg::after{
+  opacity:1;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 28%, transparent) 0%,
+      color-mix(in oklab, #00e6ff 18%, transparent) 18%,
+      transparent 55%
+    ),
+    linear-gradient(180deg,
+      color-mix(in oklab, #0a1530 80%, transparent) 0%,
+      transparent 55%
+    ),
+    linear-gradient(180deg,
+      transparent 55%,
+      color-mix(in oklab, #030814 75%, #000) 100%
+    );
+}
+
+/* ===================== GRIGLIA (STATICA, NO ANIMAZIONI) ===================== */
+.grid{
+  position:fixed; inset:0; z-index:0; opacity:.08;
+  background-image:
+    linear-gradient(#3ab1ff22 1px, transparent 1px),
+    linear-gradient(90deg, #3ab1ff22 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Layout */
+.container{
+  position:relative; z-index:2; height:100vh;
+  display:grid; grid-template-rows:auto 1fr;
+  grid-template-columns: 300px minmax(0, 1fr) clamp(300px, 25vw, 380px);
+  gap:16px; padding:12px 16px;
+  max-width:100vw; overflow-x:hidden;
+}
+header{
+  grid-column:1/4; display:flex; justify-content:space-between; align-items:center;
+  font-family:'Quantico',sans-serif; letter-spacing:2px; padding:6px 4px 8px;
+  color:#00e6ff; text-shadow:0 0 18px color-mix(in oklab, #00e6ff 60%, #000);
+}
+h1{margin:0; font-size:1.2rem}
+.clock{opacity:.95}
+.led{width:10px;height:10px;border-radius:50%;box-shadow:0 0 10px currentColor;margin-right:10px}
+.led.ok{color:#27e37f} .led.bad{color:#ff5353}
+
+/* ===================== SFUMATURE UI (UGUALI SU TUTTI I TEMI) ===================== */
+.card{
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 22%, rgba(0,0,0,.70)) 0%,
+      rgba(0,0,0,.28) 50%,
+      rgba(0,0,0,.58) 100%
+    ),
+    radial-gradient(120% 160% at 15% 0%,
+      color-mix(in oklab, #00e6ff 26%, transparent) 0%,
+      transparent 60%
+    ),
+    rgba(10,16,32,.55);
+  backdrop-filter: blur(10px);
+  border:1px solid rgba(0,230,255,.25); border-radius:14px; padding:14px;
+  box-shadow:0 10px 28px rgba(0,0,0,.45);
+}
+.card .title{
+  font-family:'Quantico',sans-serif; letter-spacing:1px; margin:0 0 10px;
+  color:#00e6ff;
+}
+
+/* sinistra */
+.left{display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.btn{
+  display:block; width:100%; text-align:center; text-decoration:none; cursor:pointer;
+  padding:14px 16px; border-radius:12px; letter-spacing:.05em; transition:.2s;
+  color:#cfefff;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 14%, #071425) 0%,
+      #050c18 55%,
+      color-mix(in oklab, #00e6ff 10%, #050c18) 100%
+    );
+  border:1px solid rgba(0,230,255,.25);
+  box-shadow:inset 0 0 8px color-mix(in oklab, #00e6ff 20%, #000);
+}
+.btn:hover{
+  transform:translateY(-2px); color:#fff; border-color:#00e6ff;
+  box-shadow:0 10px 24px color-mix(in oklab, #00e6ff 40%, #000), inset 0 0 12px color-mix(in oklab, #00e6ff 45%, #000)
+}
+
+/* incendio (sfumato ma “hot”) */
+.fire-card{
+  background:
+    radial-gradient(140% 180% at 20% 0%,
+      rgba(255,95,0,.28) 0%,
+      transparent 55%
+    ),
+    linear-gradient(180deg,
+      rgba(55,0,0,.82) 0%,
+      rgba(20,0,0,.72) 55%,
+      rgba(10,0,0,.86) 100%
+    );
+  border:2px solid #ff3030;
+  box-shadow:0 0 25px #ff5f00, inset 0 0 20px rgba(255,0,0,.25);
+  border-radius:16px;
+  padding:14px;
+}
+.fire-title{
+  font-family:'Quantico',sans-serif;
+  letter-spacing:1px;
+  color:#ff5050;
+  text-shadow:0 0 12px #ff5f00;
+  display:flex;align-items:center;gap:10px;margin:0 0 10px;
+}
+.fire-icon{
+  width:20px;height:24px;
+  background:radial-gradient(circle at 50% 30%,#ff6600 0%,#ff0000 60%,transparent 100%);
+  border-radius:60% 60% 40% 40% / 70% 70% 30% 30%;
+  box-shadow:0 0 15px #ff6600;
+}
+.fire-select{
+  width:100%;
+  background:rgba(0,0,0,.6);
+  color:#ffd1d1;
+  border:2px solid #ff3b3b;
+  border-radius:12px;
+  padding:12px 18px;
+  font-family:'Quantico',sans-serif;
+  letter-spacing:.05em;
+  box-shadow:0 0 14px rgba(255,59,59,.45);
+  transition:.22s;
+  font-size:1rem;
+}
+.fire-select:hover{
+  transform:translateY(-2px);
+  box-shadow:0 0 22px rgba(255,59,59,.65);
+}
+option{background:#071222; color:#ffb9b9}
+
+/* system health */
+.sys-card{padding:12px 14px;}
+.sys-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.sys-title{font-family:'Quantico',sans-serif;letter-spacing:.08em;font-size:.8rem;text-transform:uppercase;color:#00e6ff;}
+.sys-status{font-size:.75rem;color:#27e37f;display:flex;align-items:center;gap:4px;}
+.sys-dot{width:7px;height:7px;border-radius:50%;background:#27e37f;box-shadow:0 0 10px #27e37f;}
+.sys-chart{margin-top:4px;display:flex;flex-direction:column;gap:6px;}
+.sys-row{display:flex;align-items:center;gap:6px;font-size:.78rem;}
+.sys-label{width:38px;opacity:.85;}
+.sys-bar-track{flex:1;height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;}
+.sys-bar-fill{height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg, rgba(39,227,127,.2), #27e37f);box-shadow:0 0 10px rgba(39,227,127,.55);transition:width .6s ease-out;}
+.sys-value{width:40px;text-align:right;font-variant-numeric:tabular-nums;opacity:.9;}
+
+/* centro */
+.center{display:grid; grid-template-rows: auto auto 1fr; gap:14px; overflow:hidden}
+.meteo-hero{display:grid; grid-template-columns: 1fr 1fr; gap:14px;}
+.hero-box{
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 20%, rgba(0,0,0,.75)) 0%,
+      rgba(0,0,0,.26) 50%,
+      rgba(0,0,0,.62) 100%
+    ),
+    radial-gradient(120% 160% at 15% 10%,
+      color-mix(in oklab, #00e6ff 30%, transparent) 0%,
+      transparent 60%
+    ),
+    rgba(10,16,32,.55);
+  border:1px solid rgba(0,230,255,.25); border-radius:14px; padding:14px;
+}
+.hero-now{display:flex; align-items:center; gap:16px;}
+.hero-temp{font-size:3rem; font-weight:700; text-shadow:0 0 14px color-mix(in oklab, #00e6ff 40%, #000)}
+.hero-desc{opacity:.95}
+.hero-grid{display:grid; grid-template-columns: repeat(3,1fr); gap:10px; margin-top:6px; font-size:.98rem;}
+.hero-kv{
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 14%, rgba(0,0,0,.66)) 0%,
+      rgba(0,0,0,.22) 55%,
+      rgba(0,0,0,.55) 100%
+    );
+  border:1px solid color-mix(in oklab, #00e6ff 18%, #000);
+  border-radius:10px; padding:10px; text-align:center;
+}
+.map-wrap{height:320px; border-radius:14px; overflow:hidden; border:1px solid rgba(0,230,255,.25)}
+#map{height:100%}
+.forecast{display:flex;gap:6px;justify-content:flex-start;flex-wrap:wrap;overflow:visible;padding-bottom:6px}
+.fcard{
+  flex:1 1 auto;min-width:60px;max-width:90px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 14%, rgba(0,0,0,.66)) 0%,
+      rgba(0,0,0,.22) 55%,
+      rgba(0,0,0,.55) 100%
+    );
+  border:1px solid rgba(0,230,255,.25);border-radius:12px;padding:10px;text-align:center;
+}
+.fh{font-weight:700; margin-bottom:6px}
+.fic{height:38px; margin:4px 0}
+.ft{font-size:1.1rem; font-weight:700}
+
+/* destra */
+.right{display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.log{
+  height:46vh; overflow:auto;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 14%, rgba(0,0,0,.66)) 0%,
+      rgba(0,0,0,.22) 55%,
+      rgba(0,0,0,.55) 100%
+    );
+  border:1px solid rgba(0,230,255,.25); border-radius:12px; padding:10px
+}
+.log-entry{padding:6px 8px; margin:6px 0; border-left:3px solid #00e6ff; background:rgba(255,255,255,.02)}
+.ko-list{
+  height:calc(54vh - 14px); overflow:auto;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 14%, rgba(0,0,0,.66)) 0%,
+      rgba(0,0,0,.22) 55%,
+      rgba(0,0,0,.55) 100%
+    );
+  border:1px solid rgba(0,230,255,.25); border-radius:12px; padding:10px
+}
+.ko-item{
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  border:2px solid #ff9f1a; border-radius:10px; padding:8px 12px; margin:6px 0;
+  background:
+    linear-gradient(90deg,
+      rgba(0,0,0,.26) 0%,
+      color-mix(in oklab, #00e6ff 16%, rgba(0,0,0,.18)) 55%,
+      rgba(0,0,0,.26) 100%
+    );
+  color:#ffdcb0; font-weight:600;
+}
+.ko-x{animation:blink 1s infinite}@keyframes blink{50%{opacity:.3}}
+
+.left, .center, .right, .card, .map-wrap, .meteo-hero, .hero-box { min-width: 0; }
+.meteo-hero { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+.map-wrap { width: 100%; }
+
+/* Riquadri colonna destra 50/50 */
+.right{display:flex;flex-direction:column;gap:14px;overflow:hidden;}
+.right > .card{flex:1 1 50%;display:flex;flex-direction:column;min-height:0;}
+.right > .card .log,
+.right > .card .ko-list{flex:1 1 auto;overflow:auto;}
+
+/* Responsive */
+@media (max-width:1200px){
+  .container{grid-template-columns: 1fr; grid-auto-rows: auto; height:auto}
+  .left,.right{order:2} .center{order:1}
+  .log, .ko-list{height:260px}
+}
+
+.header-right{display:flex;align-items:center;gap:10px;}
+.theme-btn{
+  border-radius:999px; border:1px solid rgba(0,230,255,.25);
+  background:rgba(0,0,0,.55);
+  color:#00e6ff;
+  font-family:'Rajdhani',sans-serif;
+  font-size:.8rem; letter-spacing:.09em;
+  padding:6px 14px;
+  cursor:pointer;
+  text-transform:uppercase;
+  box-shadow:0 0 10px color-mix(in oklab, #00e6ff 40%, #000);
+  transition:.18s;
+}
+.theme-btn:hover{transform:translateY(-1px);box-shadow:0 0 16px color-mix(in oklab, #00e6ff 65%, #000);}
+
+/* Temi (solo variabili: sfumature restano identiche) */
+body[data-theme="blue"]{--accent:#7fd0ff;--glass:rgba(7,12,32,.75);--border:rgba(0,230,255,.35);--text:#e8faff;--bg1:#05081c;--bg2:#02040c;--fire:#ff3030;--fireGlow:#ff5f00;}
+body[data-theme="green"]{--accent:#7CFF8A;--glass:rgba(2,20,10,.80);--border:rgba(124,255,138,.28);--text:#e3ffe8;--bg1:#02140b;--bg2:#000603;--fire:#ffbf00;--fireGlow:#ffe066;}
+body[data-theme="red"]{--accent:#ff6b81;--glass:rgba(32,6,10,.80);--border:rgba(255,107,129,.32);--text:#ffe9ef;--bg1:#20030a;--bg2:#050106;--fire:#ff3030;--fireGlow:#ff6b3d;}
+
+/* ticker */
+.ticker{margin-top:6px;display:flex;align-items:center;gap:8px;border-radius:10px;border:1px solid rgba(0,230,255,.25);padding:4px 10px;font-size:.82rem;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 14%, rgba(0,0,0,.66)) 0%,
+      rgba(0,0,0,.22) 55%,
+      rgba(0,0,0,.55) 100%
+    );
+}
+.ticker-label{font-family:'Quantico',sans-serif;letter-spacing:.12em;font-size:.7rem;text-transform:uppercase;color:#00e6ff;white-space:nowrap;}
+.ticker-track{position:relative;overflow:hidden;flex:1;height:2.1em;}
+.ticker-item{position:absolute;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;animation:tickerSlide 16s linear infinite;}
+.ticker-img{width:26px;height:26px;border-radius:6px;object-fit:cover;flex:0 0 26px;box-shadow:0 0 8px rgba(0,0,0,.8);}
+@keyframes tickerSlide{0%{transform:translateX(100%);}100%{transform:translateX(-140%);}}
+
+/* news grid */
+.news-grid{margin-top:8px;border-radius:10px;border:1px solid rgba(0,230,255,.25);padding:6px 8px 8px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #00e6ff 14%, rgba(0,0,0,.66)) 0%,
+      rgba(0,0,0,.22) 55%,
+      rgba(0,0,0,.55) 100%
+    );
+}
+.news-grid-title{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;opacity:.8;margin-bottom:4px;}
+.news-grid-items{max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;}
+.news-grid-item{display:flex;align-items:flex-start;gap:6px;font-size:.8rem;padding:3px 4px;border-radius:6px;background:rgba(0,0,0,.3);cursor:pointer;}
+.news-grid-item:hover{background:rgba(255,255,255,.06);}
+.news-grid-thumb{width:40px;height:26px;border-radius:4px;object-fit:cover;flex:0 0 40px;}
+.news-grid-text{flex:1;line-height:1.2;}
+
+/* ===================== ✅ NUOVO MINI TASTO HEADER (ARCHIVIO PASSWORD) ===================== */
+.archive-btn{
+  border-radius:999px;
+  border:1px solid rgba(0,230,255,.25);
+  background:rgba(0,0,0,.55);
+  color:#00e6ff;
+  font-family:'Rajdhani',sans-serif;
+  font-size:.72rem;
+  letter-spacing:.09em;
+  padding:6px 12px;
+  cursor:pointer;
+  text-transform:uppercase;
+  box-shadow:0 0 10px color-mix(in oklab, #00e6ff 35%, #000);
+  transition:.18s;
+}
+.archive-btn:hover{
+  transform:translateY(-1px);
+  box-shadow:0 0 16px color-mix(in oklab, #00e6ff 65%, #000);
+}
+/* ===================== ✅ TECH NEWS HEADER (stessa dimensione del bottone ARCHIVIO) ===================== */
+.header-tech{
+  display:flex;
+  align-items:center;
+  gap:8px;
+
+  /* identico a .archive-btn */
+  border-radius:999px;
+  border:1px solid rgba(0,230,255,.25);
+  background:rgba(0,0,0,.55);
+  color:#00e6ff;
+  font-family:'Rajdhani',sans-serif;
+  font-size:.72rem;
+  letter-spacing:.09em;
+  padding:6px 12px;
+  text-transform:uppercase;
+  box-shadow:0 0 10px color-mix(in oklab, #00e6ff 35%, #000);
+  transition:.18s;
+
+  /* larghezza uguale al bottone (fissa) */
+  width:190px;
+  overflow:hidden;
+}
+.header-tech:hover{
+  transform:translateY(-1px);
+  box-shadow:0 0 16px color-mix(in oklab, #00e6ff 65%, #000);
+}
+.header-tech .label{white-space:nowrap; opacity:.95}
+.header-tech .track{position:relative; flex:1; overflow:hidden; height:1.4em;}
+.header-tech .item{
+  position:absolute; left:0; top:0;
+  display:inline-flex; align-items:center; gap:6px;
+  white-space:nowrap;
+  animation:headerTechSlide 12s linear infinite;
+}
+@keyframes headerTechSlide{
+  0%{transform:translateX(100%);}
+  100%{transform:translateX(-140%);}
+}
+
+/* ===================== ✅ SYSTEM HEALTH HEADER (CPU LIVE) ===================== */
+.header-sys{
+  display:flex;
+  align-items:center;
+  gap:8px;
+
+  border-radius:999px;
+  border:1px solid rgba(0,230,255,.25);
+  background:rgba(0,0,0,.55);
+  color:#00e6ff;
+  font-family:'Rajdhani',sans-serif;
+  font-size:.72rem;
+  letter-spacing:.09em;
+  padding:6px 12px;
+  text-transform:uppercase;
+  box-shadow:0 0 10px color-mix(in oklab, #00e6ff 35%, #000);
+  transition:.18s;
+
+  width:210px;
+}
+.header-sys:hover{
+  transform:translateY(-1px);
+  box-shadow:0 0 16px color-mix(in oklab, #00e6ff 65%, #000);
+}
+.header-sys .label{white-space:nowrap;opacity:.95}
+.header-sys .mini-track{
+  flex:1;
+  height:10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.06);
+  overflow:hidden;
+}
+.header-sys .mini-fill{
+  height:100%;
+  width:0%;
+  border-radius:999px;
+  background:linear-gradient(90deg, rgba(39,227,127,.2), #27e37f);
+  box-shadow:0 0 10px rgba(39,227,127,.55);
+  transition:width .6s ease-out;
+}
+.header-sys .mini-val{
+  width:42px;
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
+
+/* ===============================
+   🔥 FIAMMA ANIMATA AVANZATA
+   =============================== */
+.fire-icon{
+  position:relative;
+  width:20px;
+  height:28px;
+  display:inline-block;
+  vertical-align:-4px;
+  transform-origin:50% 90%;
+  filter:
+    drop-shadow(0 0 10px rgba(255,95,0,.55))
+    drop-shadow(0 0 18px rgba(255,48,48,.25));
+  animation: flameSway 1.05s ease-in-out infinite;
+}
+.fire-icon::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius: 58% 58% 45% 45% / 72% 72% 35% 35%;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255,255,220,.95) 0 14%, transparent 15%),
+    radial-gradient(circle at 42% 34%, rgba(255,195,40,.95) 0 24%, transparent 25%),
+    radial-gradient(circle at 60% 46%, rgba(255,140,0,.95) 0 34%, transparent 35%),
+    radial-gradient(circle at 50% 72%, rgba(255,60,0,.95) 0 56%, rgba(255,0,0,.82) 57% 100%);
+  transform: rotate(-2deg);
+  animation: flameFlicker .16s infinite alternate;
+}
+.fire-icon::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:34%;
+  width:62%;
+  height:62%;
+  transform:translateX(-50%);
+  border-radius: 62% 62% 48% 48% / 78% 78% 38% 38%;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255,255,235,.98) 0 20%, rgba(255,205,60,.9) 21% 52%, transparent 53%),
+    radial-gradient(circle at 40% 52%, rgba(255,150,0,.85) 0 42%, transparent 43%);
+  mix-blend-mode: screen;
+  opacity:.95;
+  animation: flameInner 0.22s infinite alternate;
+}
+@keyframes flameSway{
+  0%{ transform: rotate(-4deg) translateY(0); }
+  40%{ transform: rotate(2deg) translateY(-1px); }
+  100%{ transform: rotate(-4deg) translateY(0); }
+}
+@keyframes flameFlicker{
+  from{ transform: rotate(-2deg) scaleX(.97) scaleY(.98); }
+  to{ transform: rotate(1deg) scaleX(1.05) scaleY(1.03); }
+}
+@keyframes flameInner{
+  from{ transform: translateX(-50%) translateY(0) scale(.92); opacity:.78; }
+  to{ transform: translateX(-50%) translateY(-1px) scale(1.06); opacity:.98; }
+}
+
+/* ===============================
+   ✨ ICONE ANIMATE EXTRA
+   =============================== */
+.ico{
+  display:inline-block;
+  width:18px; height:18px;
+  margin-right:8px;
+  vertical-align:-3px;
+  position:relative;
+  filter: drop-shadow(0 0 6px rgba(0,230,255,.22));
+}
+.ico-links::before,.ico-links::after{
+  content:"";position:absolute;width:8px;height:8px;border:2px solid rgba(0,230,255,.9);border-radius:999px;top:4px;
+}
+.ico-links::before{left:0}.ico-links::after{right:0}
+.ico-links{
+  background:linear-gradient(90deg, rgba(0,230,255,0) 0%, rgba(0,230,255,.85) 50%, rgba(0,230,255,0) 100%);
+  background-size:140% 2px;background-repeat:no-repeat;background-position:50% 50%;
+  animation: linksFlow 1.2s linear infinite;
+}
+@keyframes linksFlow{0%{background-position:-30% 50%}100%{background-position:130% 50%}}
+
+.ico-gear{
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0,230,255,0) 0 42%, rgba(0,230,255,.85) 43% 47%, rgba(0,230,255,0) 48%),
+    conic-gradient(from 0deg,
+      rgba(0,230,255,.95) 0 12deg, rgba(0,230,255,0) 12deg 24deg,
+      rgba(0,230,255,.95) 24deg 36deg, rgba(0,230,255,0) 36deg 48deg,
+      rgba(0,230,255,.95) 48deg 60deg, rgba(0,230,255,0) 60deg 72deg,
+      rgba(0,230,255,.95) 72deg 84deg, rgba(0,230,255,0) 84deg 96deg);
+  animation: gearSpin 2.1s linear infinite;
+}
+@keyframes gearSpin{to{transform:rotate(360deg)}}
+
+
+/* ===============================
+   📻 WEBRADIO (HEADER) - panel in BODY (portal)
+   =============================== */
+.radio-mini{ position:relative; display:inline-flex; align-items:center; }
+.radio-btn{
+  height:38px; min-width:38px;
+  border-radius:12px;
+  background: rgba(10,16,32,.55);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  cursor:pointer;
+  box-shadow: 0 10px 26px rgba(0,0,0,.20);
+}
+.radio-btn:hover{ border-color: rgba(0,230,255,.40); }
+
+.radio-portal{
+  position:fixed;
+  top:80px;
+  right:24px;
+  width:420px;
+  max-width:92vw;
+  padding:10px 10px 9px;
+  border-radius:14px;
+  background: rgba(10,16,32,.80);
+  border:1px solid rgba(0,230,255,.22);
+  box-shadow: 0 18px 42px rgba(0,0,0,.38);
+  backdrop-filter: blur(10px);
+  display:none;
+  z-index: 2147483000;
+}
+.radio-portal.open{ display:block; }
+
+.radio-top{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:8px;
+}
+.radio-title{
+  font-family: Quantico, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  font-size:12px;
+  letter-spacing:.8px;
+  color: rgba(232,250,255,.92);
+  white-space:nowrap;
+}
+.radio-close{
+  margin-left:auto;
+  height:30px;
+  width:34px;
+  border-radius:10px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+
+.radio-player{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:10px;
+}
+.radio-play{
+  height:36px;
+  min-width:86px;
+  border-radius:12px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.24);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+.radio-play:hover{ border-color: rgba(0,230,255,.42); }
+.radio-now{
+  flex:1;
+  padding:8px 10px;
+  border-radius:12px;
+  background: rgba(3,8,20,.35);
+  border:1px solid rgba(0,230,255,.14);
+  color: rgba(232,250,255,.88);
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:800;
+  letter-spacing:.2px;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+.radio-vol{
+  width:120px;
+}
+
+.radio-list{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:8px;
+}
+.radio-station{
+  height:34px;
+  border-radius:12px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.18);
+  color: rgba(232,250,255,.90);
+  cursor:pointer;
+  padding:0 10px;
+  text-align:left;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  letter-spacing:.2px;
+}
+.radio-station:hover{ border-color: rgba(0,230,255,.38); }
+.radio-station.active{
+  background: rgba(0,230,255,.14);
+  border-color: rgba(0,230,255,.40);
+  box-shadow: inset 0 0 0 1px rgba(0,230,255,.14);
+}
+
+.radio-hint{
+  margin-top:10px;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-size:11px;
+  color: rgba(232,250,255,.72);
+  line-height:1.2;
+}
+@media (max-width: 520px){
+  .radio-list{ grid-template-columns: 1fr; }
+}
+
+
+/* 🔇 RADIO MUTE BUTTON */
+.radio-mute-btn{
+  height:38px;
+  min-width:38px;
+  margin-left:6px;
+  border-radius:12px;
+  background: rgba(10,16,32,.55);
+  border:1px solid rgba(255,60,60,.35);
+  color: #ff5f5f;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  cursor:pointer;
+  box-shadow: 0 10px 26px rgba(0,0,0,.20);
+}
+.radio-mute-btn.active{
+  background: rgba(255,60,60,.18);
+  border-color: rgba(255,60,60,.65);
+  color:#ff3030;
+}
+
+
+/* ===============================
+   📝 QUICK NOTES (HEADER) - portal
+   =============================== */
+.notes-btn{
+  height:38px;
+  min-width:38px;
+  margin-left:6px;
+  border-radius:12px;
+  background: rgba(10,16,32,.55);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+  cursor:pointer;
+  box-shadow: 0 10px 26px rgba(0,0,0,.20);
+}
+.notes-btn:hover{ border-color: rgba(0,230,255,.40); }
+
+.notes-portal{
+  position:fixed;
+  top:90px;
+  right:24px;
+  width:min(520px, 92vw);
+  max-width:92vw;
+  padding:12px;
+  border-radius:16px;
+  background: rgba(10,16,32,.82);
+  border:1px solid rgba(0,230,255,.22);
+  box-shadow: 0 18px 42px rgba(0,0,0,.38);
+  backdrop-filter: blur(10px);
+  display:none;
+  z-index: 2147483000;
+}
+.notes-portal.open{ display:block; }
+
+.notes-top{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:10px;
+}
+.notes-title{
+  font-family: Quantico, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  font-size:12px;
+  letter-spacing:.9px;
+  color: rgba(232,250,255,.92);
+  white-space:nowrap;
+}
+.notes-meta{
+  margin-left:auto;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:700;
+  font-size:12px;
+  color: rgba(232,250,255,.72);
+}
+.notes-actions{
+  display:flex;
+  gap:8px;
+}
+.notes-action, .notes-close{
+  height:30px;
+  border-radius:10px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+}
+.notes-action{ padding:0 10px; }
+.notes-close{ width:34px; }
+
+.notes-text{
+  width:100%;
+  height:260px;
+  resize: vertical;
+  min-height:180px;
+  max-height:60vh;
+  border-radius:14px;
+  padding:12px 12px;
+  background: rgba(3,8,20,.48);
+  border:1px solid rgba(0,230,255,.18);
+  color: rgba(232,250,255,.92);
+  outline:none;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:650;
+  font-size:14px;
+  line-height:1.25;
+}
+.notes-text:focus{
+  border-color: rgba(0,230,255,.45);
+  box-shadow: 0 0 0 3px rgba(0,230,255,.12);
+}
+.notes-hint{
+  margin-top:8px;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-size:11px;
+  color: rgba(232,250,255,.68);
+  line-height:1.2;
+}
+
+
+/* 🟢 FACTORIAL BUTTON */
+.factorial-btn{
+  height:38px;
+  min-width:38px;
+  margin-left:6px;
+  padding:0 8px;
+  border-radius:12px;
+  background: rgba(10,16,32,.55);
+  border:1px solid rgba(0,230,255,.22);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow: 0 10px 26px rgba(0,0,0,.20);
+}
+.factorial-btn:hover{
+  border-color: rgba(0,230,255,.45);
+}
+.factorial-btn img{
+  height:18px;
+  filter: brightness(0) invert(1);
+  opacity:.9;
+}
+
+
+.factorial-btn{
+  color:#ffffff; /* SVG uses currentColor */
+}
+.factorial-btn:hover{
+  color:#00e6ff;
+}
+
+
+/* ===============================
+   🛰️ MAPPE 3D (TECNOMAT) - static panel
+   =============================== */
+.tgu3d-btn{
+  width:38px;
+  height:38px;
+  min-width:38px;
+  margin-left:6px;
+  border-radius:12px;
+  background: rgba(10,16,32,.55);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+  cursor:pointer;
+  box-shadow: 0 10px 26px rgba(0,0,0,.20);
+}
+.tgu3d-btn:hover{ border-color: rgba(0,230,255,.45); }
+
+.tgu3d-portal{
+  position:fixed;
+  top:90px;
+  right:24px;
+  width:min(420px, 92vw);
+  padding:10px;
+  border-radius:16px;
+  background: rgba(10,16,32,.82);
+  border:1px solid rgba(0,230,255,.22);
+  box-shadow: 0 18px 42px rgba(0,0,0,.38);
+  backdrop-filter: blur(10px);
+  display:none;
+  z-index: 2147483000;
+}
+.tgu3d-portal.open{ display:block; }
+.tgu3d-top{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.tgu3d-title{
+  font-family: Quantico, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  font-size:12px;
+  letter-spacing:.9px;
+  color: rgba(232,250,255,.92);
+  white-space:nowrap;
+}
+.tgu3d-close{
+  margin-left:auto;
+  height:30px; width:34px;
+  border-radius:10px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+.tgu3d-select{
+  width:100%;
+  height:34px;
+  border-radius:12px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  padding:0 10px;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+}
+.tgu3d-row{ display:flex; gap:8px; margin-top:10px; }
+.tgu3d-go, .tgu3d-open3d{
+  height:34px;
+  border-radius:12px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+  padding:0 10px;
+}
+.tgu3d-go{ flex:1; }
+.tgu3d-open3d{ white-space:nowrap; }
+.tgu3d-status{
+  margin-top:8px;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-size:11px;
+  color: rgba(232,250,255,.72);
+  line-height:1.2;
+  min-height:16px;
+}
+
+
+/* ===============================
+   🤖 AIUTANTE PAGINA (CHAT INTEGRATA)
+   =============================== */
+.help-btn{
+  height:38px;
+  min-width:38px;
+  margin-left:6px;
+  border-radius:12px;
+  background: rgba(10,16,32,.55);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+  cursor:pointer;
+  box-shadow: 0 10px 26px rgba(0,0,0,.20);
+}
+.help-btn:hover{ border-color: rgba(0,230,255,.40); }
+
+.help-portal{
+  position:fixed;
+  top:90px;
+  right:24px;
+  width:min(520px, 92vw);
+  max-width:92vw;
+  padding:12px;
+  border-radius:16px;
+  background: rgba(10,16,32,.82);
+  border:1px solid rgba(0,230,255,.22);
+  box-shadow: 0 18px 42px rgba(0,0,0,.38);
+  backdrop-filter: blur(10px);
+  display:none;
+  z-index: 2147483000;
+}
+.help-portal.open{ display:block; }
+
+.help-top{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:10px;
+}
+.help-title{
+  font-family: Quantico, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  font-size:12px;
+  letter-spacing:.9px;
+  color: rgba(232,250,255,.92);
+  white-space:nowrap;
+}
+.help-close{
+  margin-left:auto;
+  height:30px; width:34px;
+  border-radius:10px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+.help-body{display:flex;flex-direction:column;gap:10px;}
+.help-chat{
+  height:260px;
+  overflow:auto;
+  border-radius:14px;
+  padding:10px;
+  background: rgba(3,8,20,.35);
+  border:1px solid rgba(0,230,255,.14);
+}
+.help-msg{
+  padding:8px 10px;
+  border-radius:12px;
+  margin:8px 0;
+  line-height:1.2;
+  font-weight:650;
+  font-size:14px;
+}
+.help-msg.bot{
+  background: rgba(0,230,255,.10);
+  border:1px solid rgba(0,230,255,.18);
+}
+.help-msg.user{
+  background: rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.10);
+  margin-left:auto;
+}
+.help-row{display:flex;gap:8px;}
+.help-input{
+  flex:1;
+  height:36px;
+  border-radius:12px;
+  padding:0 12px;
+  background: rgba(3,8,20,.48);
+  border:1px solid rgba(0,230,255,.18);
+  color: rgba(232,250,255,.92);
+  outline:none;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:800;
+}
+.help-input:focus{border-color: rgba(0,230,255,.45);box-shadow: 0 0 0 3px rgba(0,230,255,.12);}
+.help-send{
+  height:36px;
+  border-radius:12px;
+  padding:0 12px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.24);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+.help-send:hover{ border-color: rgba(0,230,255,.42); }
+
+.help-quick{display:flex;flex-wrap:wrap;gap:6px;}
+.help-chip{
+  height:28px;
+  border-radius:999px;
+  padding:0 10px;
+  background: rgba(0,230,255,.10);
+  border:1px solid rgba(0,230,255,.18);
+  color: rgba(232,250,255,.90);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  font-size:12px;
+}
+.help-chip:hover{ border-color: rgba(0,230,255,.40); }
+
+
+
+/* ===============================
+   🤖 MINI ROBOT HINT (HEADER) — V2
+   =============================== */
+.robo-hint{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  margin-left:10px;
+  padding:6px 10px 6px 8px;
+  border-radius:999px;
+  border:1px solid rgba(0,230,255,.25);
+  background:rgba(0,0,0,.45);
+  color:rgba(232,250,255,.92);
+  font-family:'Rajdhani',sans-serif;
+  font-size:.72rem;
+  letter-spacing:.06em;
+  cursor:pointer;
+  user-select:none;
+  box-shadow:0 0 10px color-mix(in oklab, #00e6ff 25%, #000);
+  transition:.18s;
+}
+.robo-hint:hover{
+  transform:translateY(-1px);
+  border-color:#00e6ff;
+  box-shadow:0 0 18px color-mix(in oklab, #00e6ff 60%, #000);
+}
+
+.robo-wrap{
+  width:26px;height:26px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:10px;
+  background:
+    radial-gradient(60% 70% at 35% 30%,
+      color-mix(in oklab, #00e6ff 22%, transparent) 0%,
+      transparent 70%),
+    rgba(0,0,0,.22);
+  border:1px solid color-mix(in oklab, #00e6ff 22%, #000);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+}
+
+.robo-svg{
+  width:22px;height:22px;
+  filter:
+    drop-shadow(0 0 10px color-mix(in oklab, #00e6ff 60%, transparent))
+    drop-shadow(0 0 18px rgba(0,0,0,.25));
+  transform-origin:50% 85%;
+  animation: rbBob 1.25s ease-in-out infinite;
+}
+.robo-hint:hover .robo-svg{ animation-duration: .95s; }
+
+.rb-antenna-dot{ animation: rbPulse 1.6s ease-in-out infinite; }
+.rb-glow{ opacity:.85; animation: rbGlow 1.6s ease-in-out infinite; }
+
+/* blinking: lids scale in/out */
+.rb-lid{
+  transform-origin: 50% 50%;
+  transform: scaleY(0);
+  animation: rbBlink 4.2s infinite;
+  opacity:.95;
+}
+.rb-lid:nth-of-type(2){ animation-delay: .12s; }
+
+@keyframes rbBob{
+  0%{ transform: translateY(0) rotate(-2deg); }
+  50%{ transform: translateY(-2px) rotate(2deg); }
+  100%{ transform: translateY(0) rotate(-2deg); }
+}
+@keyframes rbPulse{
+  0%,100%{ opacity:.65; transform: translateY(0); }
+  50%{ opacity:1; transform: translateY(-.6px); }
+}
+@keyframes rbGlow{
+  0%,100%{ opacity:.55; }
+  50%{ opacity:1; }
+}
+@keyframes rbBlink{
+  0%, 7%, 100%{ transform: scaleY(0); }
+  3%, 5%{ transform: scaleY(1); }
+}
+
+.robo-hint .txt{white-space:nowrap;opacity:.95}
+@media (max-width: 980px){
+  .robo-hint .txt{ display:none; }
+}
+
+
+/* ===============================
+   🤖 MINI ROBOT HINT (HEADER) — V3
+   Box invariato, robot più grande
+   =============================== */
+.robo-hint{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-left:10px;
+  padding:6px 12px;
+  border-radius:999px;
+  border:1px solid rgba(0,230,255,.25);
+  background:rgba(0,0,0,.55);
+  color:rgba(232,250,255,.92);
+  font-family:'Rajdhani',sans-serif;
+  font-size:.72rem;
+  letter-spacing:.06em;
+  cursor:pointer;
+  user-select:none;
+  box-shadow:0 0 10px color-mix(in oklab, #00e6ff 25%, #000);
+  transition:.18s;
+  height:32px;           /* IDENTICA agli altri pill */
+}
+.robo-hint:hover{
+  transform:translateY(-1px);
+  border-color:#00e6ff;
+  box-shadow:0 0 18px color-mix(in oklab, #00e6ff 60%, #000);
+}
+
+/* contenitore invariato */
+.robo-wrap{
+  width:22px;
+  height:22px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:8px;
+  background:
+    radial-gradient(60% 70% at 35% 30%,
+      color-mix(in oklab, #00e6ff 22%, transparent) 0%,
+      transparent 70%),
+    rgba(0,0,0,.22);
+  border:1px solid color-mix(in oklab, #00e6ff 22%, #000);
+}
+
+/* ROBOT più grande */
+.robo-svg{
+  width:26px;      /* ↑ solo il robot */
+  height:26px;
+  filter:
+    drop-shadow(0 0 10px color-mix(in oklab, #00e6ff 60%, transparent))
+    drop-shadow(0 0 18px rgba(0,0,0,.25));
+  transform-origin:50% 85%;
+  animation: rbBob 1.25s ease-in-out infinite;
+}
+.robo-hint:hover .robo-svg{ animation-duration: .95s; }
+
+.rb-antenna-dot{ animation: rbPulse 1.6s ease-in-out infinite; }
+.rb-glow{ opacity:.85; animation: rbGlow 1.6s ease-in-out infinite; }
+
+.rb-lid{
+  transform-origin: 50% 50%;
+  transform: scaleY(0);
+  animation: rbBlink 4.2s infinite;
+  opacity:.95;
+}
+.rb-lid:nth-of-type(2){ animation-delay: .12s; }
+
+@keyframes rbBob{
+  0%{ transform: translateY(0) rotate(-2deg); }
+  50%{ transform: translateY(-2px) rotate(2deg); }
+  100%{ transform: translateY(0) rotate(-2deg); }
+}
+@keyframes rbPulse{
+  0%,100%{ opacity:.65; transform: translateY(0); }
+  50%{ opacity:1; transform: translateY(-.6px); }
+}
+@keyframes rbGlow{
+  0%,100%{ opacity:.55; }
+  50%{ opacity:1; }
+}
+@keyframes rbBlink{
+  0%, 7%, 100%{ transform: scaleY(0); }
+  3%, 5%{ transform: scaleY(1); }
+}
+
+.robo-hint .txt{white-space:nowrap;opacity:.95}
+@media (max-width: 980px){
+  .robo-hint .txt{ display:none; }
+}
+
+
+/* ===============================
+   🎓 MINI TOUR (overlay + robot)
+   =============================== */
+.tour-overlay{
+  position:fixed; inset:0;
+  display:none;
+  z-index:2147483500;
+}
+.tour-overlay.open{ display:block; }
+
+.tour-dim{
+  position:absolute; inset:0;
+  background:rgba(0,0,0,.55);
+  backdrop-filter: blur(2px);
+}
+
+.tour-highlight{
+  position:absolute;
+  border-radius:14px;
+  border:1px solid rgba(0,230,255,.55);
+  box-shadow:
+    0 0 0 4px rgba(0,230,255,.10),
+    0 0 26px rgba(0,230,255,.25);
+  pointer-events:none;
+}
+
+.tour-tip{
+  position:absolute;
+  width:min(420px, 92vw);
+  border-radius:18px;
+  background:rgba(10,16,32,.92);
+  border:1px solid rgba(0,230,255,.22);
+  box-shadow:0 18px 42px rgba(0,0,0,.42);
+  padding:12px;
+  color:rgba(232,250,255,.92);
+  backdrop-filter: blur(10px);
+  pointer-events:auto;
+}
+.tour-top{
+  display:flex; align-items:center; gap:10px;
+  margin-bottom:8px;
+}
+.tour-robot{
+  width:34px; height:34px;
+  display:inline-flex;
+  align-items:center; justify-content:center;
+  border-radius:14px;
+  border:1px solid rgba(0,230,255,.22);
+  background:rgba(0,0,0,.22);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+}
+.tour-title{
+  font-family: Quantico, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  font-size:12px;
+  letter-spacing:.9px;
+}
+.tour-close{
+  margin-left:auto;
+  height:30px; width:34px;
+  border-radius:10px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+.tour-text{
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:750;
+  font-size:15px;
+  line-height:1.25;
+  opacity:.95;
+}
+.tour-controls{
+  display:flex; gap:8px;
+  margin-top:10px;
+}
+.tour-btn{
+  height:34px;
+  border-radius:12px;
+  padding:0 12px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+.tour-btn:hover{ border-color: rgba(0,230,255,.42); }
+.tour-btn.primary{
+  background: rgba(0,230,255,.10);
+  border-color: rgba(0,230,255,.34);
+}
+.tour-progress{
+  margin-left:auto;
+  display:flex; align-items:center; gap:6px;
+}
+.tour-dot{
+  width:7px; height:7px;
+  border-radius:999px;
+  background: rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.10);
+}
+.tour-dot.on{
+  background: rgba(0,230,255,.75);
+  border-color: rgba(0,230,255,.40);
+  box-shadow:0 0 10px rgba(0,230,255,.35);
+}
+
+/* Robot tooltip SVG + espressioni */
+.tour-robot svg{ width:26px; height:26px; transform-origin:50% 85%; animation: tourBob 1.1s ease-in-out infinite; }
+@keyframes tourBob{ 0%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-2px) rotate(2deg)} 100%{transform:translateY(0) rotate(-2deg)} }
+.tour-robot .rb-antenna-dot{ animation: tourPulse 1.5s ease-in-out infinite; }
+@keyframes tourPulse{ 0%,100%{opacity:.65} 50%{opacity:1} }
+.tour-robot .rb-lid{ transform-origin:50% 50%; transform:scaleY(0); animation: tourBlink 4.1s infinite; opacity:.95; }
+.tour-robot .rb-lid:nth-of-type(2){ animation-delay:.12s; }
+@keyframes tourBlink{ 0%, 7%, 100%{transform:scaleY(0)} 3%,5%{transform:scaleY(1)} }
+
+/* mouth variants (default = smile) */
+.tour-robot .mouth-smile{ display:block; }
+.tour-robot .mouth-wow,
+.tour-robot .mouth-think,
+.tour-robot .mouth-ok{ display:none; }
+
+.tour-tip.expr-wow .mouth-smile{ display:none; }
+.tour-tip.expr-wow .mouth-wow{ display:block; }
+
+.tour-tip.expr-think .mouth-smile{ display:none; }
+.tour-tip.expr-think .mouth-think{ display:block; }
+
+.tour-tip.expr-ok .mouth-smile{ display:none; }
+.tour-tip.expr-ok .mouth-ok{ display:block; }
+
+/* eyes tint per expression */
+.tour-tip.expr-think .rb-eye{ opacity:.85; }
+.tour-tip.expr-wow .rb-eye{ opacity:1; }
+
+
+.tour-robot{
+  width:64px !important;
+  height:64px !important;
+  border-radius:20px !important;
+}
+.tour-robot svg{
+  width:54px !important;
+  height:54px !important;
+}
+
+
+/* ===============================
+   🤖 INTRO ASSISTENTE (NO TOUR)
+   =============================== */
+.intro-overlay{
+  position:fixed; inset:0;
+  display:none;
+  z-index:2147483600;
+}
+.intro-overlay.open{ display:block; }
+
+.intro-dim{
+  position:absolute; inset:0;
+  background: radial-gradient(80% 60% at 50% 30%,
+    rgba(0,230,255,.10) 0%,
+    rgba(0,0,0,.72) 55%,
+    rgba(0,0,0,.86) 100%);
+  backdrop-filter: blur(3px);
+}
+
+.intro-card{
+  position:absolute;
+  left:50%; top:18%;
+  transform: translateX(-50%) translateY(-12px) scale(.96);
+  width:min(720px, 94vw);
+  border-radius:22px;
+  background: rgba(10,16,32,.88);
+  border:1px solid rgba(0,230,255,.28);
+  box-shadow:
+    0 28px 70px rgba(0,0,0,.55),
+    0 0 36px rgba(0,230,255,.18);
+  overflow:hidden;
+  opacity:0;
+}
+
+/* high-tech entrance */
+.intro-overlay.open .intro-card{
+  animation: introIn .55s cubic-bezier(.16,1,.3,1) forwards;
+}
+@keyframes introIn{
+  0%{ opacity:0; transform: translateX(-50%) translateY(-18px) scale(.94); filter: blur(4px); }
+  55%{ opacity:1; transform: translateX(-50%) translateY(0) scale(1.02); filter: blur(0); }
+  100%{ opacity:1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+.intro-grid{
+  position:absolute; inset:0;
+  background:
+    linear-gradient(transparent 0 0),
+    repeating-linear-gradient(0deg, rgba(0,230,255,.08) 0 1px, transparent 1px 10px),
+    repeating-linear-gradient(90deg, rgba(0,230,255,.05) 0 1px, transparent 1px 16px);
+  opacity:.10;
+  pointer-events:none;
+}
+
+.intro-scan{
+  position:absolute; left:-30%; top:-10%;
+  width:160%; height:140%;
+  background: linear-gradient(110deg,
+    transparent 0%,
+    rgba(0,230,255,.10) 45%,
+    rgba(0,230,255,.22) 50%,
+    rgba(0,230,255,.10) 55%,
+    transparent 100%);
+  transform: rotate(6deg);
+  animation: introScan 1.8s ease-in-out infinite;
+  opacity:.55;
+  pointer-events:none;
+}
+@keyframes introScan{
+  0%{ transform: translateX(-18%) rotate(6deg); opacity:.40; }
+  50%{ transform: translateX(6%) rotate(6deg); opacity:.70; }
+  100%{ transform: translateX(-18%) rotate(6deg); opacity:.40; }
+}
+
+.intro-top{
+  display:flex; align-items:center; gap:14px;
+  padding:16px 16px 10px 16px;
+}
+.intro-close{
+  margin-left:auto;
+  height:32px; width:38px;
+  border-radius:12px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+.intro-title{
+  font-family: Quantico, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:900;
+  font-size:13px;
+  letter-spacing:1.1px;
+}
+
+.intro-body{
+  display:flex;
+  gap:18px;
+  padding:8px 18px 18px 18px;
+  align-items:center;
+}
+.intro-text{
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:800;
+  font-size:16px;
+  line-height:1.25;
+  opacity:.95;
+}
+.intro-sub{
+  margin-top:10px;
+  font-weight:750;
+  opacity:.85;
+  font-size:14px;
+}
+
+/* BIG ROBOT */
+.intro-robot{
+  width:140px; height:140px;
+  display:flex;
+  align-items:center; justify-content:center;
+  border-radius:28px;
+  border:1px solid rgba(0,230,255,.26);
+  background:
+    radial-gradient(70% 65% at 40% 30%, rgba(0,230,255,.18), transparent 70%),
+    rgba(0,0,0,.20);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.03),
+    0 0 36px rgba(0,230,255,.16);
+  flex: 0 0 auto;
+}
+.intro-robot svg{
+  width:120px; height:120px;
+  transform-origin:50% 85%;
+  animation: introBob 1.05s ease-in-out infinite;
+  filter:
+    drop-shadow(0 0 14px rgba(0,230,255,.35))
+    drop-shadow(0 0 28px rgba(0,0,0,.25));
+}
+@keyframes introBob{
+  0%{ transform: translateY(0) rotate(-2deg); }
+  50%{ transform: translateY(-4px) rotate(2deg); }
+  100%{ transform: translateY(0) rotate(-2deg); }
+}
+.intro-robot .rb-antenna-dot{ animation: introPulse 1.4s ease-in-out infinite; }
+@keyframes introPulse{ 0%,100%{opacity:.65} 50%{opacity:1} }
+.intro-robot .rb-lid{
+  transform-origin:50% 50%;
+  transform:scaleY(0);
+  animation:introBlink 4.2s infinite;
+}
+.intro-robot .rb-lid:nth-of-type(2){ animation-delay:.14s; }
+@keyframes introBlink{ 0%, 7%, 100%{transform:scaleY(0)} 3%,5%{transform:scaleY(1)} }
+
+.intro-actions{
+  display:flex; gap:10px;
+  padding:0 18px 18px 18px;
+}
+.intro-btn{
+  height:36px;
+  border-radius:12px;
+  padding:0 14px;
+  background: rgba(3,8,20,.60);
+  border:1px solid rgba(0,230,255,.22);
+  color: rgba(232,250,255,.92);
+  cursor:pointer;
+  font-family: Rajdhani, system-ui, -apple-system, Segoe UI, Arial;
+  font-weight:950;
+}
+.intro-btn.primary{
+  background: rgba(0,230,255,.12);
+  border-color: rgba(0,230,255,.36);
+}
+
+</style>
+</head>
+
+<body>
+<!-- PUBLIC READY: host this file on an internal web server reachable via VPN. -->
+
+<div class="bg"></div>
+<div class="grid"></div>
+
+<div class="container">
+  <header>
+    <!-- ✅ MODIFICA: bottone a fianco del titolo -->
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="vpnLed" class="led bad"></span>
+      <h1>NASAV-NET I.A. PANEL • v10</h1>
+
+      <button class="archive-btn" onclick="openArchivioPassword()">ARCHIVIO PASSWORD</button>
+      <div class="header-tech" aria-label="Tech news">
+        <span class="label">TECH</span>
+        <div class="track"><div id="headerTechItem" class="item">Sistema I.A. ONLINE ✅</div></div>
+      </div>
+
+      <div class="header-sys" aria-label="System health">
+        <span class="label">SYSTEM</span>
+        <div class="mini-track">
+          <div id="barCpuHeader" class="mini-fill"></div>
+        </div>
+        <span id="valCpuHeader" class="mini-val">--%</span>
+      </div>
+
+      <button class="robo-hint" id="roboHint" type="button" title="Aiuto rapido">
+        <span class="robo-wrap" aria-hidden="true">
+          <svg class="robo-svg" viewBox="0 0 64 64" role="img" aria-hidden="true">
+            <defs>
+              <linearGradient id="rbBody" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="rgba(255,255,255,.18)"/>
+                <stop offset="55%" stop-color="rgba(255,255,255,.06)"/>
+                <stop offset="100%" stop-color="rgba(0,0,0,.28)"/>
+              </linearGradient>
+              <radialGradient id="rbGlow" cx="50%" cy="35%" r="70%">
+                <stop offset="0%" stop-color="rgba(0,230,255,.55)"/>
+                <stop offset="55%" stop-color="rgba(0,230,255,.18)"/>
+                <stop offset="100%" stop-color="rgba(0,230,255,0)"/>
+              </radialGradient>
+            </defs>
+
+            <!-- glow -->
+            <circle class="rb-glow" cx="32" cy="30" r="22" fill="url(#rbGlow)"/>
+
+            <!-- antenna -->
+            <g class="rb-antenna">
+              <rect x="31" y="7" width="2" height="9" rx="1" fill="rgba(232,250,255,.75)"/>
+              <circle class="rb-antenna-dot" cx="32" cy="7" r="3.5" fill="rgba(0,230,255,.95)"/>
+            </g>
+
+            <!-- head -->
+            <rect x="14" y="14" width="36" height="32" rx="10" fill="url(#rbBody)"
+                  stroke="rgba(0,230,255,.28)" stroke-width="2"/>
+            <rect x="18" y="18" width="28" height="24" rx="9" fill="rgba(0,0,0,.22)"
+                  stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+
+            <!-- eyes -->
+            <g class="rb-eyes">
+              <circle class="rb-eye" cx="26" cy="30" r="4.4" fill="rgba(0,230,255,.95)"/>
+              <circle class="rb-eye" cx="38" cy="30" r="4.4" fill="rgba(0,230,255,.95)"/>
+              <circle class="rb-eye-shine" cx="24.6" cy="28.6" r="1.2" fill="rgba(255,255,255,.85)"/>
+              <circle class="rb-eye-shine" cx="36.6" cy="28.6" r="1.2" fill="rgba(255,255,255,.85)"/>
+              <!-- blink lids -->
+              <rect class="rb-lid" x="20.5" y="25.5" width="11" height="9" rx="4.5" fill="rgba(0,0,0,.22)"/>
+              <rect class="rb-lid" x="32.5" y="25.5" width="11" height="9" rx="4.5" fill="rgba(0,0,0,.22)"/>
+            </g>
+
+            <!-- mouth -->
+            <path d="M25 38 Q32 42 39 38" fill="none" stroke="rgba(232,250,255,.70)" stroke-width="2" stroke-linecap="round"/>
+
+            <!-- cheeks -->
+            <circle cx="20" cy="36" r="2" fill="rgba(255,255,255,.08)"/>
+            <circle cx="44" cy="36" r="2" fill="rgba(255,255,255,.08)"/>
+          </svg>
+        </span>
+        <span class="txt">Chiedimi aiuto cliccando su 🤖!</span>
+      </button>
+
+</div>
+
+    <div class="header-right">
+
+
+<a class="factorial-btn" href="https://app.factorialhr.com" target="_blank" title="Apri Factorial HR" aria-label="Apri Factorial HR">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor"/>
+    <path d="M8 8h8v2H10v3h5v2h-5v5H8V8z" fill="#0a1530"/>
+  </svg>
+</a>
+
+<div class="tgu3d-mini">
+  <button class="tgu3d-btn" id="tgu3dToggle" type="button" title="Mappe 3D Tecnomat">🛰️</button>
+</div>
+
+
+
+      
+
+<!-- 📻 WebRadio (panel in BODY) -->
+<div class="radio-mini">
+  <button class="radio-btn" id="radioToggle" type="button" title="WebRadio">📻</button>
+<button class="radio-mute-btn" id="radioMuteToggle" type="button" title="Mute radio">🔇</button>
+
+</div>
+<button class="notes-btn" id="notesToggle" type="button" title="Quick Notes">📝</button>
+
+
+<button class="help-btn" id="helpToggle" type="button" title="Aiutante pagina">🤖</button>
+
+<button id="themeBtn" class="theme-btn">🎨 BLU</button>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- Colonna sinistra -->
+  <aside class="left">
+    <div class="card">
+      <h3 class="title"><span class="ico ico-links"></span>ACCESSI RAPIDI</h3>
+      <a class="btn" href="https://outlook.office.com/mail/" target="_blank">OUTLOOK</a>
+      <a class="btn" href="https://nasav-my.sharepoint.com/?login_hint=centraleoperativa%40nasav%2Eit&source=waffle" target="_blank">ONEDRIVE</a>
+      <!-- ✅ LINK CORRETTO -->
+      <a class="btn" href="https://chatgpt.com/g/g-684f3f2db0a88191a80a6e31aa55cb3d-nasav-net-i-a" target="_blank">🧠 NASAV-NET GPT</a>
+    </div>
+
+    <div class="card">
+      <h3 class="title"><span class="ico ico-gear"></span>OPERAZIONI</h3>
+      <a class="btn" href="https://accounts.cradlepointecm.com/#/login" target="_blank">RIAVVIO CRADLE POINT</a>
+      <button class="btn" onclick="openBacheca()">📋 BACHECA OPERATIVA</button>
+      <a class="btn" href="https://vcenter01.nasav.local" target="_blank">VSPHERE</a>
+      <a class="btn" href="https://residencecontrol.com/Client/Login.aspx?ReturnUrl=%2fClient%2fClients%2fClientControllersContent.aspx" target="_blank">RC CONTROL</a>
+      <a class="btn" href="https://192.168.190.10:4343/authorization/" target="_blank">COLLABORATION</a>
+      <a class="btn" href="http://80.94.114.94:8888/web.html" target="_blank">PCMR</a>
+      <a class="btn" href="https://www.gamstv.it/" target="_blank">GAMS TV</a>
+    </div>
+
+    <div class="fire-card">
+      <h3 class="fire-title"><span class="fire-icon"></span>CONTROLLO INCENDIO</h3>
+      <select class="fire-select" onchange="if(this.value) window.open(this.value,'_blank')">
+        <option value="">Seleziona sede...</option>
+        <option value="http://145.14.175.2:8080/index1.html">SINERGA</option>
+        <option value="https://alfe.gamstv.it:8080/index1.html">ALFE</option>
+        <option value="http://192.168.20.14/index1.html">UNICO LAINATE</option>
+        <option value="http://213.182.93.38/index1.html">CHIARAVALLI</option>
+        <option value="http://89.96.210.230/index1.html">SIIT LIQUIDI</option>
+      </select>
+    </div>
+  </aside>
+
+  <!-- Colonna centrale -->
+  <section class="center">
+    <div class="meteo-hero">
+      <div class="hero-box">
+        <h3 class="title" style="margin-bottom:10px">METEO • MARNATE (ora)</h3>
+        <div class="hero-now">
+          <div id="icon-now" aria-hidden="true"></div>
+          <div>
+            <div class="hero-temp" id="temp-now">--°C</div>
+            <div class="hero-desc" id="desc-now">Aggiornamento in corso…</div>
+          </div>
+        </div>
+        <div class="hero-grid" style="margin-top:10px">
+          <div class="hero-kv"><div>💨 Vento</div><b id="wind-now">—</b></div>
+          <div class="hero-kv"><div>💧 Umidità</div><b id="hum-now">—</b></div>
+          <div class="hero-kv"><div>🧭 Pressione</div><b id="press-now">—</b></div>
+        </div>
+      </div>
+
+      <div class="hero-box">
+        <h3 class="title" style="margin-bottom:10px">SOLE</h3>
+        <div class="hero-grid">
+          <div class="hero-kv"><div>🌅 Alba</div><b id="sunrise">—</b></div>
+          <div class="hero-kv"><div>🌇 Tramonto</div><b id="sunset">—</b></div>
+          <div class="hero-kv"><div>🕒 Ora locale</div><b id="clock-mini">—</b></div>
+        </div>
+        <div class="hero-kv" style="margin-top:10px; text-align:left">
+          <div style="opacity:.9">📍 Coordinate: <b>45.63, 8.90</b> • Aggiornamento ogni 10 min</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card map-wrap">
+      <div id="map"></div>
+    </div>
+
+    <div class="card">
+      <h3 class="title">Prossime ore</h3>
+      <div class="forecast" id="forecast"></div>
+
+      <div class="ticker">
+        <div class="ticker-label">TECH NEWS</div>
+        <div class="ticker-track">
+          <div id="tickerItem" class="ticker-item">
+            <img id="tickerImg" class="ticker-img" src="" alt="news" />
+            <span id="tickerText">Caricamento ultime notizie di tecnologia…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Colonna destra -->
+  <aside class="right">
+    <div class="card">
+      <h3 class="title">🧠 EVENT FEED</h3>
+      <div id="log" class="log"></div>
+    </div>
+
+    <div class="card">
+      <h3 class="title">👥 PROSSIMO TURNO (FACTORIAL)</h3>
+      <div id="nextShiftBox" class="ko-list">Caricamento…</div>
+    </div>
+  </aside>
+</div>
+
+
+<!-- 🤖 AIUTANTE PAGINA (CHAT INTEGRATA) -->
+<div class="help-portal" id="helpPortal" aria-label="Aiutante NASAV-NET">
+  <div class="help-top">
+    <div class="help-title">🤖 AIUTANTE • Guida rapida pannello</div>
+    <button class="help-close" id="helpClose" type="button">✕</button>
+  </div>
+
+  <div class="help-body">
+    <div class="help-quick">
+
+      <button class="help-chip" data-q="come funziona la pagina">Panoramica</button>
+      <button class="help-chip" data-q="spiega tasti in alto">Tasti in alto</button>
+      <button class="help-chip" data-q="spiega archivio password">Archivio Password</button>
+      <button class="help-chip" data-q="spiega factorial">Factorial</button>
+      <button class="help-chip" data-q="spiega mappe 3d">Mappe 3D</button>
+      <button class="help-chip" data-q="spiega radio">Radio</button>
+      <button class="help-chip" data-q="spiega note">Note</button>
+      <button class="help-chip" data-q="spiega controllo incendio">Incendio</button>
+      <button class="help-chip" data-q="spiega prossimo turno">Turni</button>
+      <button class="help-chip" data-q="lista tasti">Lista tasti</button>
+</div>
+
+    <div class="help-chat" id="helpChat"></div>
+
+    <div class="help-row">
+      <input class="help-input" id="helpInput" placeholder="Scrivi: 'mappa', 'turni', 'password', 'radio'..." />
+      <button class="help-send" id="helpSend" type="button">Invia</button>
+    </div>
+  </div>
+</div>
+
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ===================== CONFIG ENDPOINT FACTORIAL (TUO LINK) ===================== */
+const FACTORIAL_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyG4v8HaUf9UIDtgjELeb2feBUMfTPmVwWun6UZbsEKEcHvVx7C16KEPxJkt4il-1t7Ig/exec";
+
+/* ========== Clock ========== */
+function pad(n){return String(n).padStart(2,'0')}
+function tickClock(){
+  const d=new Date();
+  const t = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  document.getElementById('clock').textContent = t;
+  document.getElementById('clock-mini').textContent = t;
+}
+tickClock(); setInterval(tickClock,1000);
+
+/* ✅ ARCHIVIO PASSWORD (apre PDF in nuova finestra/tab, NO download) */
+function openArchivioPassword(){
+  const pwd = prompt("🔐 Inserisci password di accesso all'Archivio Password:");
+  if(pwd === null) return;
+
+  const PASSWORD_CORRETTA = "Nasav5520!";
+
+  if(pwd === PASSWORD_CORRETTA){
+    // Il PDF deve stare nella stessa cartella dell'HTML
+    const w = window.open("password centrale (4).pdf", "_blank", "noopener,noreferrer");
+    if(!w){
+      alert("⚠️ Popup bloccato dal browser. Consenti i popup per questo file/sito.");
+    }
+  } else {
+    alert("❌ Password errata. Accesso negato.");
+  }
+}
+
+/* ========== LED VPN (probe JSON interno) ========== */
+async function probeVPN(){
+  try{
+    await fetch("http://192.168.1.150/pingdata.json?probe="+Date.now(), {mode:"no-cors"});
+    document.getElementById('vpnLed').className="led ok";
+    logEvent("Connessione rete OK");
+  }catch{
+    document.getElementById('vpnLed').className="led bad";
+    logEvent("Connessione rete assente");
+  }
+}
+probeVPN(); setInterval(probeVPN,15000);
+
+/* ========== Event feed helper ========== */
+const logBox = document.getElementById('log');
+function logEvent(txt){
+  const e=document.createElement('div');
+  e.className='log-entry';
+  e.textContent = `${new Date().toLocaleTimeString()} – ${txt}`;
+  logBox.prepend(e);
+  while(logBox.childNodes.length>40) logBox.removeChild(logBox.lastChild);
+}
+
+/* ========== Meteo: icone (SVG) ========== */
+function iconSVG(code){
+  const sun = `<svg viewBox="0 0 64 64" width="56" height="56">
+    <defs><radialGradient id="g1" cx="50%" cy="50%"><stop offset="0%" stop-color="#fff59d"/><stop offset="100%" stop-color="#ffca28"/></radialGradient></defs>
+    <circle cx="32" cy="32" r="14" fill="url(#g1)"/>
+    <g stroke="#ffca28" stroke-width="3">
+      <line x1="32" y1="4" x2="32" y2="14"/><line x1="32" y1="50" x2="32" y2="60"/>
+      <line x1="4" y1="32" x2="14" y2="32"/><line x1="50" y1="32" x2="60" y2="32"/>
+      <line x1="12" y1="12" x2="19" y2="19"/><line x1="45" y1="45" x2="52" y2="52"/>
+      <line x1="12" y1="52" x2="19" y2="45"/><line x1="45" y1="19" x2="52" y2="12"/>
+    </g></svg>`;
+  const cloud = `<svg viewBox="0 0 64 64" width="56" height="56">
+    <ellipse cx="28" cy="36" rx="18" ry="12" fill="#cfd8dc"/><ellipse cx="40" cy="34" rx="14" ry="10" fill="#eceff1"/>
+  </svg>`;
+  const rain = `<svg viewBox="0 0 64 64" width="56" height="56">
+    <ellipse cx="28" cy="30" rx="18" ry="12" fill="#cfd8dc"/><ellipse cx="44" cy="28" rx="14" ry="10" fill="#eceff1"/>
+    <g stroke="#40c4ff" stroke-width="3" stroke-linecap="round">
+      <line x1="24" y1="46" x2="20" y2="56"/><line x1="34" y1="46" x2="30" y2="56"/><line x1="44" y1="46" x2="40" y2="56"/>
+    </g>
+  </svg>`;
+  const storm = `<svg viewBox="0 0 64 64" width="56" height="56">
+    <ellipse cx="28" cy="28" rx="18" ry="12" fill="#b0bec5"/><ellipse cx="44" cy="26" rx="14" ry="10" fill="#cfd8dc"/>
+    <polygon points="30,36 20,52 30,50 24,62 42,40 32,42" fill="#ffd54f" stroke="#ffca28"/>
+  </svg>`;
+  const snow = `<svg viewBox="0 0 64 64" width="56" height="56">
+    <ellipse cx="28" cy="30" rx="18" ry="12" fill="#cfd8dc"/><ellipse cx="44" cy="28" rx="14" ry="10" fill="#eceff1"/>
+    <g fill="#e1f5fe">
+      <circle cx="24" cy="48" r="3"/><circle cx="34" cy="50" r="3"/><circle cx="44" cy="48" r="3"/>
+    </g>
+  </svg>`;
+  if([0,1].includes(code)) return sun;
+  if([2,3,45,48].includes(code)) return cloud;
+  if([51,53,55,61,63,65,80,81,82].includes(code)) return rain;
+  if([95,96,99].includes(code)) return storm;
+  if([71,73,75,85,86].includes(code)) return snow;
+  return cloud;
+}
+const descMap={
+  0:"Sereno",1:"Quasi sereno",2:"Variabile",3:"Coperto",45:"Nebbia",48:"Nebbia gelata",
+  51:"Pioviggine",53:"Pioviggine",55:"Pioviggine forte",61:"Pioggia",63:"Pioggia",65:"Pioggia forte",
+  71:"Neve",73:"Neve",75:"Neve forte",80:"Rovesci",81:"Rovesci",82:"Rovesci forti",
+  85:"Nevischio",86:"Nevischio forte",95:"Temporali",96:"Temporali",99:"Temporali forti"
+};
+
+/* ========== Mappa ========== */
+const map = L.map('map',{zoomControl:false,attributionControl:false}).setView([45.63,8.90],12);
+window.addEventListener('resize', ()=> map.invalidateSize());
+setTimeout(()=> map.invalidateSize(), 50);
+
+// Satellite (Esri World Imagery) — stile “Google Earth” (licenza Esri)
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community'
+}).addTo(map);
+
+// Etichette/strade sopra il satellite (trasparente)
+L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  attribution: 'Labels &copy; Esri'
+}).addTo(map);
+
+L.marker([45.63,8.90]).addTo(map).bindPopup('Marnate').openPopup();
+
+/* ========== Meteo ========== */
+async function loadMeteo(){
+  try{
+    const cur = await fetch("https://api.open-meteo.com/v1/forecast?latitude=45.63&longitude=8.90&current_weather=true&daily=sunrise,sunset&timezone=auto");
+    const cd = await cur.json();
+    const w = cd.current_weather;
+    document.getElementById('icon-now').innerHTML = iconSVG(w.weathercode);
+    document.getElementById('temp-now').textContent = `${w.temperature}°C`;
+    document.getElementById('desc-now').textContent = descMap[w.weathercode] || "—";
+    document.getElementById('wind-now').textContent = `${w.windspeed} km/h`;
+    document.getElementById('hum-now').textContent = cd.hourly?.relativehumidity_2m?.[0] ? cd.hourly.relativehumidity_2m[0]+"%" : "—";
+    document.getElementById('press-now').textContent = cd.hourly?.surface_pressure?.[0] ? cd.hourly.surface_pressure[0]+" hPa" : "—";
+    const sr = cd.daily?.sunrise?.[0] || ""; const ss = cd.daily?.sunset?.[0] || "";
+    document.getElementById('sunrise').textContent = sr ? new Date(sr).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : "—";
+    document.getElementById('sunset').textContent  = ss ? new Date(ss).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : "—";
+
+    const fc = await fetch("https://api.open-meteo.com/v1/forecast?latitude=45.63&longitude=8.90&hourly=temperature_2m,weathercode&forecast_days=2&timezone=auto");
+    const fd = await fc.json();
+    const times = fd.hourly.time;
+    const temps = fd.hourly.temperature_2m;
+    const codes = fd.hourly.weathercode;
+
+    const now = new Date();
+    const idx0 = times.findIndex(t => {
+      const tt = new Date(t);
+      return tt.getHours()===now.getHours() && tt.getDate()===now.getDate();
+    });
+    const start = Math.max(0, idx0);
+    const the_end = Math.min(times.length, start+12);
+
+    const cont = document.getElementById('forecast');
+    cont.innerHTML = "";
+    for(let i=start;i<the_end;i++){
+      const dt = new Date(times[i]);
+      const hh = dt.toLocaleTimeString([], {hour:'2-digit'});
+      const ic = iconSVG(codes[i]);
+      const el = document.createElement('div');
+      el.className = 'fcard';
+      el.innerHTML = `<div class="fh">${hh}</div><div class="fic">${ic}</div><div class="ft">${Math.round(temps[i])}°C</div>`;
+      cont.appendChild(el);
+    }
+
+    logEvent("Meteo aggiornato");
+  }catch(e){
+    document.getElementById('desc-now').textContent = "Meteo non disponibile";
+  }
+}
+loadMeteo(); setInterval(loadMeteo, 10*60*1000);
+
+/* ===== Theme switcher (uguale) ===== */
+(function(){
+  const order = ['blue','green','red'];
+  const labels = {blue:'BLU', green:'VERDE', red:'ROSSO'};
+  function setTheme(name){
+    const theme = order.includes(name) ? name : 'blue';
+    document.body.dataset.theme = theme;
+    localStorage.setItem('nasavTheme', theme);
+    const btn = document.getElementById('themeBtn');
+    if(btn) btn.textContent = '🎨 ' + labels[theme];
+  }
+  window.setThemeNASAV = setTheme;
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const saved = localStorage.getItem('nasavTheme') || 'blue';
+    setTheme(saved);
+    const btn = document.getElementById('themeBtn');
+    if(btn){
+      btn.addEventListener('click', ()=>{
+        const current = document.body.dataset.theme || 'blue';
+        const idx = order.indexOf(current);
+        const next = order[(idx+1)%order.length];
+        setTheme(next);
+      });
+    }
+  });
+})();
+
+function openBacheca() {
+  window.open("https://docs.google.com/forms/d/e/1FAIpQLSfg7O8J4sSiPcrBZGWaeBqGqL8AvAPeLc3YQvZERXS6TKKkeQ/viewform", "_blank");
+}
+
+/* ===== TECH NEWS TICKER (OFFLINE NASAV) ===== */
+(function(){
+  const items = [
+    { title: "Sistema i.a - ATTIVO✅", link: "", thumb: "https://images.pexels.com/photos/5380642/pexels-photo-5380642.jpeg?auto=compress&cs=tinysrgb&w=400" },
+    { title: "Chat gpt - ONLINE✅", link: "", thumb: "https://images.pexels.com/photos/1181675/pexels-photo-1181675.jpeg?auto=compress&cs=tinysrgb&w=400" },
+    { title: "Nasav net panel - ONLINE✅", link: "", thumb: "https://images.pexels.com/photos/5380665/pexels-photo-5380665.jpeg?auto=compress&cs=tinysrgb&w=400" },
+    { title: "Panel backup - COMPLETATO✅", link: "", thumb: "https://images.pexels.com/photos/1181467/pexels-photo-1181467.jpeg?auto=compress&cs=tinysrgb&w=400" }
+  ];
+  let idx = -1;
+
+  function renderNewsGrid(){
+    const box = document.getElementById("newsGridItems");
+    if(!box) return;
+    box.innerHTML = "";
+    const it = items[0];
+    const div = document.createElement("div");
+    div.className = "news-grid-item";
+
+    const img = document.createElement("img");
+    img.className = "news-grid-thumb";
+    img.src = it.thumb;
+    img.alt = "thumb";
+
+    const span = document.createElement("div");
+    span.className = "news-grid-text";
+    span.textContent = it.title;
+
+    div.appendChild(img);
+    div.appendChild(span);
+    box.appendChild(div);
+  }
+
+  function nextNews(){
+    if(!items.length) return;
+    idx = (idx + 1) % items.length;
+    const it = items[idx];
+    const textEl = document.getElementById("tickerText");
+    const imgEl  = document.getElementById("tickerImg");
+    const itemEl = document.getElementById("tickerItem");
+    if(!textEl || !imgEl || !itemEl) return;
+
+    textEl.textContent = it.title;
+    imgEl.src = it.thumb;
+    imgEl.style.display = "block";
+
+    itemEl.style.cursor = "default";
+    itemEl.onclick = null;
+
+    itemEl.style.animation = "none";
+    void itemEl.offsetHeight;
+    itemEl.style.animation = "";
+    itemEl.style.animation = "tickerSlide 16s linear infinite";
+  }
+
+  document.addEventListener("DOMContentLoaded", ()=>{
+    renderNewsGrid();
+    nextNews();
+    setInterval(nextNews, 40000);
+  });
+})();
+
+/* ====== GRAFICO LIVE FINT0 SOLO CPU ====== */
+(function(){
+  const barCpu = document.getElementById('barCpu');
+  const barCpuHeader = document.getElementById('barCpuHeader');
+  const valCpu = document.getElementById('valCpu');
+  const valCpuHeader = document.getElementById('valCpuHeader');
+  if(!barCpuHeader || !valCpuHeader) return;
+
+  let cpu = 34;
+  function clamp(v,min,max){return v<min?min:v>max?max:v;}
+  function jitter(value, spread){return value + ((Math.random()*spread*2)-spread);}
+
+  function updateFakeCpu(){
+    cpu = clamp(jitter(cpu,4), 20, 60);
+    if(barCpu) barCpu.style.width = cpu + "%";
+    if(barCpuHeader) barCpuHeader.style.width = cpu + "%";
+    if(valCpu) valCpu.textContent = Math.round(cpu) + "%";
+    if(valCpuHeader) valCpuHeader.textContent = Math.round(cpu) + "%";
+  }
+  updateFakeCpu();
+  setInterval(updateFakeCpu, 1200);
+})();
+
+/* ===================== PROSSIMO TURNO (FACTORIAL) ===================== */
+(function(){
+  const box = document.getElementById('nextShiftBox');
+  if(!box) return;
+
+  function esc(s){
+    return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  function renderEmpty(){
+    box.innerHTML = `<div class="ko-item" style="border-color:#00e6ff">
+      <span>✅ Nessun turno futuro trovato</span>
+      <span>—</span>
+    </div>`;
+  }
+
+  async function loadNextShift(){
+    try{
+      const url = FACTORIAL_WEBAPP_URL + '?action=next&nocache=' + Date.now();
+      const res = await fetch(url, { cache:'no-store' });
+      const data = await res.json();
+
+      if(!data || data.ok !== true || data.empty){
+        renderEmpty();
+        return;
+      }
+
+      const start = esc(data.start || '--:--');
+      const end = esc(data.end || '--:--');
+      const loc = esc(data.location || '');
+      const ops = Array.isArray(data.operators) ? data.operators : [];
+
+      let html = `
+        <div class="ko-item" style="border-color:#00e6ff">
+          <span>⏱️ ${start} → ${end}${loc ? ' • ' + loc : ''}</span>
+          <span style="opacity:.9">${ops.length} op</span>
+        </div>
+      `;
+
+      if(!ops.length){
+        html += `<div class="ko-item"><span>⚠️ Nessun operatore in risposta</span><span>—</span></div>`;
+      } else {
+        html += ops.map((name,i)=>`
+          <div class="ko-item" style="border-color:${i===0 ? '#00e6ff' : '#ff9f1a'}">
+            <span>${i+1}️⃣ ${esc(name)}</span>
+            <span>IN ARRIVO</span>
+          </div>
+        `).join('');
+      }
+
+      box.innerHTML = html;
+    }catch(e){
+      box.innerHTML = `<div class="ko-item"><span>⚠️ Errore lettura Factorial</span><span>KO</span></div>`;
+    }
+  }
+
+  loadNextShift();
+  setInterval(loadNextShift, 15000);
+})();
+/* ===== TECH NEWS HEADER (barra scorrevole in alto) ===== */
+(function(){
+  const el = document.getElementById('headerTechItem');
+  if(!el) return;
+
+  const items = [
+    "Sistema I.A. ONLINE ✅",
+    "NASAV NET PANEL OPERATIVO",
+    "ChatGPT ONLINE ✅",
+    "Backup COMPLETATO ✅"
+  ];
+  let idx = 0;
+
+  function restart(){
+    el.style.animation = "none";
+    void el.offsetHeight;
+    el.style.animation = "headerTechSlide 12s linear infinite";
+  }
+
+  function next(){
+    idx = (idx + 1) % items.length;
+    el.textContent = items[idx];
+    restart();
+  }
+
+  // avvio (garantisce che scorra sempre)
+  restart();
+  setInterval(next, 12000);
+})();
+</script>
+
+
+<script>
+(function(){
+  const toggle = document.getElementById('radioToggle');
+  if(!toggle) return;
+
+  const panel = document.createElement('div');
+  panel.className = 'radio-portal';
+  panel.id = 'radioPortal';
+  panel.innerHTML = `
+    <div class="radio-top">
+      <span class="radio-title">WEBRADIO</span>
+      <button class="radio-close" id="radioClose" type="button">✕</button>
+    </div>
+
+    <div class="radio-player">
+      <button class="radio-play" id="radioPlay" type="button">▶ PLAY</button>
+      <div class="radio-now" id="radioNow">RMC • Radio Monte Carlo</div>
+      <input class="radio-vol" id="radioVol" type="range" min="0" max="1" step="0.01" value="0.6" title="Volume" />
+    </div>
+
+    <div class="radio-list" id="radioList">
+<button class="radio-station active" type="button" data-url="http://edge.radiomontecarlo.net/RMC.mp3" data-name="Radio Monte Carlo">RMC</button>
+<button class="radio-station" type="button" data-url="https://icecast.unitedradio.it/Radio105.mp3" data-name="Radio 105">Radio 105</button>
+<button class="radio-station" type="button" data-url="https://streamingv2.shoutcast.com/rtl-1025" data-name="RTL 102.5">RTL 102.5</button>
+<button class="radio-station" type="button" data-url="https://stream.rds.radio/audio/rds.stream_aac/playlist.m3u8" data-name="RDS">RDS</button>
+<button class="radio-station" type="button" data-url="https://icecast.unitedradio.it/Virgin.mp3" data-name="Virgin Radio">Virgin Radio</button>
+<button class="radio-station" type="button" data-url="https://radio24-live.stream24.net/radio24.mp3" data-name="Radio 24">Radio 24</button>
+</div>
+
+    <div class="radio-hint">
+      Se una radio non parte: prova un’altra (alcuni stream cambiano/limitano). In caso di blocchi, apri la pagina con un altro browser o disattiva estensioni ad‑block.
+    </div>
+  `;
+  document.body.appendChild(panel);
+
+  const close = panel.querySelector('#radioClose');
+  const playBtn = panel.querySelector('#radioPlay');
+  const now = panel.querySelector('#radioNow');
+  const vol = panel.querySelector('#radioVol');
+  const list = panel.querySelector('#radioList');
+  const stationBtns = Array.from(panel.querySelectorAll('.radio-station'));
+
+  const audio = new Audio(); window._nasavRadioAudio = audio;
+  audio.crossOrigin = "anonymous";
+  audio.preload = "none";
+  audio.volume = parseFloat(vol.value || "0.6");
+
+  function openPanel(){
+    const r = toggle.getBoundingClientRect();
+    const desiredRight = Math.max(12, window.innerWidth - r.right);
+    panel.style.right = desiredRight + 'px';
+    panel.style.top = Math.min(window.innerHeight - 140, r.bottom + 10) + 'px';
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden','false');
+  }
+  function closePanel(){
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden','true');
+  }
+
+  function setActive(btn){
+    stationBtns.forEach(b => b.classList.toggle('active', b===btn));
+    const url = btn.getAttribute('data-url');
+    const name = btn.getAttribute('data-name');
+    now.textContent = btn.textContent.trim() + ' • ' + name;
+    localStorage.setItem('nasav_radio_url', url);
+    localStorage.setItem('nasav_radio_label', btn.textContent.trim());
+    localStorage.setItem('nasav_radio_name', name);
+    audio.src = url;
+    // restart if playing
+    if(!audio.paused){
+      audio.play().catch(()=>{});
+    }
+  }
+
+  // Restore
+  const savedUrl = localStorage.getItem('nasav_radio_url');
+  if(savedUrl){
+    const btn = stationBtns.find(b => b.getAttribute('data-url') === savedUrl);
+    if(btn) setActive(btn);
+  } else {
+    setActive(stationBtns[0]);
+  }
+
+  toggle.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); panel.classList.contains('open') ? closePanel() : openPanel(); });
+  close.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); closePanel(); });
+
+  document.addEventListener('click', (e)=>{
+    if(!panel.classList.contains('open')) return;
+    const t = e.target;
+    if(panel.contains(t) || toggle.contains(t)) return;
+    closePanel();
+  });
+
+  list.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.radio-station');
+    if(btn) setActive(btn);
+  });
+
+  vol.addEventListener('input', ()=>{ audio.volume = parseFloat(vol.value||"0.6"); });
+
+  function updatePlayLabel(){
+    playBtn.textContent = audio.paused ? '▶ PLAY' : '⏸ PAUSE';
+  }
+
+  playBtn.addEventListener('click', ()=>{
+    if(audio.paused){
+      audio.play().then(updatePlayLabel).catch(()=>{
+        // If autoplay policies block, user can try again
+      });
+    } else {
+      audio.pause();
+      updatePlayLabel();
+    }
+  });
+
+  audio.addEventListener('play', updatePlayLabel);
+  audio.addEventListener('pause', updatePlayLabel);
+  audio.addEventListener('error', updatePlayLabel);
+
+  window.addEventListener('resize', ()=>{ if(panel.classList.contains('open')) openPanel(); });
+  window.addEventListener('scroll', ()=>{ if(panel.classList.contains('open')) openPanel(); }, true);
+})();
+</script>
+
+
+<script>
+(function(){
+  const muteBtn = document.getElementById('radioMuteToggle');
+  if(!muteBtn) return;
+
+  // reuse the global radio audio instance created by the radio panel
+  let radioAudio = null;
+  const findAudio = () => {
+    if(radioAudio) return radioAudio;
+    // grab the Audio instance indirectly
+    if(window._nasavRadioAudio) return window._nasavRadioAudio;
+    return null;
+  };
+
+  // Toggle mute
+  muteBtn.addEventListener('click', () => {
+    const audio = findAudio();
+    if(!audio) return;
+
+    audio.muted = !audio.muted;
+    muteBtn.classList.toggle('active', audio.muted);
+    muteBtn.textContent = audio.muted ? '🔈' : '🔇';
+    localStorage.setItem('nasav_radio_muted', audio.muted ? '1' : '0');
+  });
+
+  // Restore mute state
+  const saved = localStorage.getItem('nasav_radio_muted');
+  if(saved === '1'){
+    const audio = findAudio();
+    if(audio){
+      audio.muted = true;
+      muteBtn.classList.add('active');
+      muteBtn.textContent = '🔈';
+    }
+  }
+})();
+</script>
+
+
+<script>
+(function(){
+  const btn = document.getElementById('notesToggle');
+  if(!btn) return;
+
+  const KEY = 'nasav_quick_notes_v1';
+
+  const panel = document.createElement('div');
+  panel.className = 'notes-portal';
+  panel.id = 'notesPortal';
+  panel.setAttribute('aria-hidden','true');
+  panel.innerHTML = `
+    <div class="notes-top">
+      <span class="notes-title">QUICK NOTES</span>
+      <span class="notes-meta" id="notesMeta">—</span>
+      <div class="notes-actions">
+        <button class="notes-action" id="notesCopy" type="button" title="Copia negli appunti">Copia</button>
+        <button class="notes-action" id="notesClear" type="button" title="Svuota note">Reset</button>
+        <button class="notes-close" id="notesClose" type="button" title="Chiudi">✕</button>
+      </div>
+    </div>
+    <textarea class="notes-text" id="notesText" placeholder="Scrivi note turno... (salvataggio automatico)"></textarea>
+    <div class="notes-hint">Salvataggio automatico in locale (solo su questo PC/browser). Shortcut: <b>Ctrl+S</b> per forzare il salvataggio.</div>
+  `;
+  document.body.appendChild(panel);
+
+  const closeBtn = panel.querySelector('#notesClose');
+  const text = panel.querySelector('#notesText');
+  const meta = panel.querySelector('#notesMeta');
+  const copyBtn = panel.querySelector('#notesCopy');
+  const clearBtn = panel.querySelector('#notesClear');
+
+  function fmtNow(){
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    const ss = String(d.getSeconds()).padStart(2,'0');
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  function setOpen(state){
+    panel.classList.toggle('open', state);
+    panel.setAttribute('aria-hidden', state ? 'false' : 'true');
+    if(state) {
+      // anchor near button
+      const r = btn.getBoundingClientRect();
+      const desiredRight = Math.max(12, window.innerWidth - r.right);
+      panel.style.right = desiredRight + 'px';
+      panel.style.top = Math.min(window.innerHeight - 220, r.bottom + 10) + 'px';
+      setTimeout(()=> text.focus(), 0);
+    }
+  }
+
+  function save(){
+    localStorage.setItem(KEY, text.value);
+    meta.textContent = `salvato ${fmtNow()}`;
+  }
+  function load(){
+    const v = localStorage.getItem(KEY);
+    if(v != null) text.value = v;
+    meta.textContent = v ? 'caricato' : 'vuoto';
+  }
+
+  // Debounced autosave
+  let t = null;
+  text.addEventListener('input', () => {
+    meta.textContent = '…';
+    if(t) clearTimeout(t);
+    t = setTimeout(save, 450);
+  });
+
+  // Ctrl+S force save
+  document.addEventListener('keydown', (e) => {
+    if(!panel.classList.contains('open')) return;
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){
+      e.preventDefault();
+      save();
+    }
+    if(e.key === 'Escape'){
+      setOpen(false);
+    }
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    try{
+      await navigator.clipboard.writeText(text.value || '');
+      meta.textContent = `copiato ${fmtNow()}`;
+    }catch{
+      // fallback
+      text.select();
+      document.execCommand('copy');
+      meta.textContent = `copiato ${fmtNow()}`;
+      text.setSelectionRange(text.value.length, text.value.length);
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    text.value = '';
+    save();
+  });
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const open = panel.classList.contains('open');
+    if(!open) load();
+    setOpen(!open);
+  });
+  closeBtn.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setOpen(false);
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if(!panel.classList.contains('open')) return;
+    const t = e.target;
+    if(panel.contains(t) || btn.contains(t)) return;
+    setOpen(false);
+  });
+
+  window.addEventListener('resize', () => { if(panel.classList.contains('open')) setOpen(true); });
+  window.addEventListener('scroll', () => { if(panel.classList.contains('open')) setOpen(true); }, true);
+})();
+</script>
+
+
+<a id="archivioPwdLink" href="password%20centrale%20%284%29.pdf" target="_blank" rel="noopener" style="display:none"></a>
+
+
+<script>
+(function(){
+  const PASS = 'Nasav5520!';
+  const link = document.getElementById('archivioPwdLink');
+  if(!link) return;
+
+  function normalize(s){ return (s||'').replace(/\s+/g,' ').trim().toLowerCase(); }
+
+  function findArchivioButton(){
+    // try common ids first
+    const ids = ['archivioPasswordBtn','archivioPassword','btnArchivioPassword','archivioPwdBtn','btnArchivioPwd'];
+    for(const id of ids){ const el = document.getElementById(id); if(el) return el; }
+
+    // otherwise find by text
+    const candidates = Array.from(document.querySelectorAll('button,a'));
+    return candidates.find(el => normalize(el.textContent) === 'archivio password');
+  }
+
+  const btn = findArchivioButton();
+  if(!btn) return;
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const entered = prompt('Inserisci la password per aprire Archivio Password:');
+    if(entered === null) return;
+
+    if(entered !== PASS){
+      alert('Password errata.');
+      return;
+    }
+
+    // Real link click in the same user gesture => not blocked as popup
+    link.click();
+  });
+})();
+</script>
+
+
+<div class="tgu3d-portal" id="tgu3dPortal" aria-hidden="true">
+  <div class="tgu3d-top">
+    <span class="tgu3d-title">MAPPE 3D • TECNOMAT</span>
+    <button class="tgu3d-close" id="tgu3dClose" type="button" title="Chiudi">✕</button>
+  </div>
+
+  <select class="tgu3d-select" id="tgu3dSelect">
+    <option value="" selected disabled>Seleziona un punto vendita…</option>
+  </select>
+
+  <div class="tgu3d-row">
+    <button class="tgu3d-go" id="tgu3dGo" type="button">Vai sulla mappa</button>
+    <button class="tgu3d-open3d" id="tgu3dOpen3D" type="button">Apri 3D</button>
+  </div>
+
+  <div class="tgu3d-status" id="tgu3dStatus">Seleziona una sede e premi “Vai sulla mappa”.</div>
+</div>
+
+
+<script>
+/* MAPPE3D_TECNOMAT_STATIC_v1 */
+(function(){
+  const locs = ["APRILIA", "ASSEMINI", "BARI", "CATANIA", "CERRO", "CUBOTONDO", "FERRARA", "ROMA FIDENE", "SESTO FIORENTINO", "GENOVA", "LECCE", "MODENA", "OLBIA", "ORBASSANO", "PALERMO", "PARMA", "PASSO CORESE", "PERO", "PISA", "ROMA PRENESTINA", "RAGUSA", "REZZATO", "RIMINI", "SAN FIOR", "SASSARI", "SEGRATE", "UDINE", "VENEGONO", "VERONA", "VICENZA", "CARATE", "ROZZANO", "NASAV • Via Landini 106, Marnate (VA)"];
+
+  const btn = document.getElementById('tgu3dToggle');
+  const panel = document.getElementById('tgu3dPortal');
+  const closeBtn = document.getElementById('tgu3dClose');
+  const sel = document.getElementById('tgu3dSelect');
+  const goBtn = document.getElementById('tgu3dGo');
+  const open3dBtn = document.getElementById('tgu3dOpen3D');
+  const status = document.getElementById('tgu3dStatus');
+
+  if(!btn || !panel || !sel || !goBtn || !open3dBtn) return;
+
+  // Fill dropdown once
+  if(sel.options.length <= 1){
+    for(let i=0;i<locs.length;i++) {
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = locs[i];
+      sel.appendChild(o);
+    }
+  }
+
+  function openPanel(){ panel.classList.add('open'); panel.setAttribute('aria-hidden','false'); }
+  function closePanel(){ panel.classList.remove('open'); panel.setAttribute('aria-hidden','true'); }
+
+  // Toggle reliably
+  btn.addEventListener('click', function(e){
+    e.preventDefault(); e.stopPropagation();
+    if(panel.classList.contains('open')) closePanel(); else openPanel();
+  });
+
+  if(closeBtn){
+    closeBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); closePanel(); });
+  }
+
+  document.addEventListener('click', function(e){
+    if(!panel.classList.contains('open')) return;
+    const t = e.target;
+    if(panel.contains(t) || btn.contains(t)) return;
+    closePanel();
+  });
+
+  function getMap(){
+    try{
+      if(typeof map !== 'undefined') return map;
+      if(window.map) return window.map;
+      if(window.map) return window.map;
+    }catch(_){}
+    return null;
+  }
+
+  function buildQuery(name){
+    if(name.indexOf('NASAV') === 0) return 'Via Landini 106, 21052 Marnate VA, Italia';
+    return 'Tecnomat ' + name + ', Italia';
+  }
+
+  async function geocode(label){
+    const q = buildQuery(label);
+    status.textContent = 'Cerco: ' + q + ' …';
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q);
+    const r = await fetch(url, { headers: { 'Accept':'application/json' } });
+    const data = await r.json();
+    if(!data || !data[0]) throw new Error('Nessun risultato');
+    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+  }
+
+  let marker = null;
+  let last = null;
+
+  goBtn.addEventListener('click', async function(){
+    if(!sel.value) { status.textContent = 'Seleziona prima una sede.'; return; }
+    const label = locs[parseInt(sel.value,10)];
+    try{
+      const ll = await geocode(label);
+      last = { label: label, lat: ll.lat, lon: ll.lon };
+      const map = getMap();
+      if(!map) { status.textContent = 'Mappa non trovata.'; return; }
+      map.setView([ll.lat, ll.lon], 16, { animate:true });
+      if(marker) marker.remove();
+      marker = L.marker([ll.lat, ll.lon]).addTo(map).bindPopup('<b>' + label + '</b>').openPopup();
+      status.textContent = 'OK: ' + label;
+    }catch(err){
+      status.textContent = 'Errore: ' + (err && err.message ? err.message : err);
+    }
+  });
+
+  open3dBtn.addEventListener('click', async function(){
+    if(!sel.value) { status.textContent = 'Seleziona prima una sede.'; return; }
+    const label = locs[parseInt(sel.value,10)];
+    try{
+      let ll = (last && last.label === label) ? last : null;
+      if(!ll) {
+        const g = await geocode(label);
+        ll = { label: label, lat: g.lat, lon: g.lon };
+        last = ll;
+      }
+      const gm = 'https://www.google.com/maps/@?api=1&map_action=map&center=' + ll.lat + ',' + ll.lon + '&zoom=18&basemap=satellite';
+      window.open(gm, '_blank', 'noopener');
+      status.textContent = 'Aperto 3D: ' + label;
+    }catch(err){
+      status.textContent = 'Errore: ' + (err && err.message ? err.message : err);
+    }
+  });
+})();
+</script>
+
+
+<script>
+/* ===============================
+   🤖 AIUTANTE PAGINA (OFFLINE)
+   =============================== */
+(function(){
+  const btn = document.getElementById('helpToggle');
+  if(!btn) return;
+
+  const portal = document.getElementById('helpPortal');
+  const close  = document.getElementById('helpClose');
+  const chat   = document.getElementById('helpChat');
+  const input  = document.getElementById('helpInput');
+  const send   = document.getElementById('helpSend');
+
+  function open(){ portal.classList.add('open'); greet(); setTimeout(()=>input && input.focus(), 60); }
+  function shut(){ portal.classList.remove('open'); }
+
+  btn.addEventListener('click', ()=> portal.classList.contains('open') ? shut() : open());
+
+  const robo = document.getElementById('roboHint');
+  if(robo){ robo.addEventListener('click', ()=> open()); }
+  close.addEventListener('click', shut);
+
+  // chiudi cliccando fuori
+  document.addEventListener('mousedown', (e)=>{
+    if(!portal.classList.contains('open')) return;
+    if(portal.contains(e.target) || e.target === btn) return;
+    shut();
+  });
+
+  function addMsg(text, who){
+    const d = document.createElement('div');
+    d.className = 'help-msg ' + who;
+    d.textContent = text;
+    chat.appendChild(d);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  let greeted = false;
+  function greet(){
+    if(greeted) return;
+    greeted = true;
+    addMsg("Ciao! Sono l’aiutante del NASAV‑NET Panel. Chiedimi: mappa/satellite, turni Factorial, tasti in alto, archivio password, mappe 3D Tecnomat, radio, note, temi.", "bot");
+    addMsg("Suggerimento: usa anche i bottoni rapidi sopra 👆", "bot");
+  }
+
+  
+function answer(q){
+  const raw = (q||"").trim();
+  const s = raw.toLowerCase();
+
+  // Piccolo “indice” per aiutare a scoprire i comandi
+  const INDEX = [
+    "archivio password",
+    "tech (barra in alto)",
+    "system (barra in alto)",
+    "factorial (icona)",
+    "mappe 3d (🛰️)",
+    "radio (📻)",
+    "mute radio (🔇)",
+    "note (📝)",
+    "tema colori (🎨)",
+    "orologio",
+    "outlook",
+    "onedrive",
+    "nasav-net gpt",
+    "riavvio cradle point",
+    "bacheca operativa",
+    "vsphere",
+    "rc control",
+    "collaboration",
+    "pcmr",
+    "gams tv",
+    "controllo incendio",
+    "meteo (ora)",
+    "sole (alba/tramonto)",
+    "mappa satellite (centro)",
+    "prossime ore",
+    "tech news (ticker in basso)",
+    "event feed",
+    "prossimo turno (factorial)",
+    "led connessione (pallino)"
+  ];
+
+  function shortIndex(){
+    return "Dimmi il nome del tasto/box che vuoi capire. Esempi: " +
+      "archivio password, factorial, mappe 3d, radio, note, turni, controllo incendio, outlook.";
+  }
+
+  // Base di conoscenza: spiegazioni dettagliate ma NON tecniche
+  const KB = [
+    {
+      keys: ["come funziona", "panoramica", "pagina"],
+      text:
+        "Questa pagina è il pannello operativo NASAV-NET. " +
+        "• In alto: comandi rapidi (password, factorial, mappe, radio, note, tema). " +
+        "• A sinistra: link di lavoro e operazioni. " +
+        "• Al centro: meteo + mappa + previsione ore. " +
+        "• A destra: eventi e prossimo turno. " +
+        "Dimmi un tasto e te lo spiego nel dettaglio."
+    },
+
+    // HEADER
+    {
+      keys: ["archivio", "archivio password", "password"],
+      text:
+        "ARCHIVIO PASSWORD: serve per aprire il documento con le password della centrale. " +
+        "Quando lo premi, ti chiede una password di accesso. Se la inserisci corretta, si apre il PDF in una nuova scheda (non lo scarica). " +
+        "Se non si apre, di solito è perché il browser sta bloccando i popup."
+    },
+    {
+      keys: ["tech", "barra tech", "tech (barra", "tech barra"],
+      text:
+        "TECH (barra in alto): è un promemoria che scorre con messaggi rapidi di stato (es. 'ONLINE', 'OPERATIVO', 'Backup completato'). " +
+        "Non è un pulsante: ti dà solo un colpo d’occhio veloce su informazioni utili."
+    },
+    {
+      keys: ["system", "cpu", "barra system", "system (barra"],
+      text:
+        "SYSTEM (barra in alto): è una barra che ti fa vedere a colpo d’occhio 'quanto è carico' il sistema. " +
+        "Serve solo come indicatore rapido: se la vedi alta spesso, può significare che il PC sta lavorando tanto."
+    },
+    {
+      keys: ["factorial", "icona factorial"],
+      text:
+        "FACTORIAL (icona quadrata): apre Factorial in una nuova scheda. " +
+        "È il collegamento rapido per turni, presenze e gestione personale. " +
+        "Se non si apre, controlla che il browser permetta nuove schede."
+    },
+    {
+      keys: ["mappe 3d", "3d", "tecnomat", "🛰", "satellite tgu", "tgu"],
+      text:
+        "MAPPE 3D (🛰️): apre un pannellino dove scegli una sede Tecnomat dall’elenco. " +
+        "Poi puoi aprire la mappa della sede per vedere la zona dall’alto. " +
+        "È utile quando devi localizzare velocemente un sito senza cercarlo a mano."
+    },
+    {
+      keys: ["radio", "📻", "webradio"],
+      text:
+        "RADIO (📻): apre un pannello con le stazioni disponibili. " +
+        "Puoi avviare l’ascolto e regolare il volume. " +
+        "Serve come sottofondo durante il turno, senza uscire dalla pagina."
+    },
+    {
+      keys: ["mute", "🔇", "silenzia", "muto"],
+      text:
+        "MUTE RADIO (🔇): spegne/azzera l’audio al volo. " +
+        "È fatto apposta per quando devi rispondere al telefono o serve silenzio immediato."
+    },
+    {
+      keys: ["note", "📝", "quick notes", "appunti"],
+      text:
+        "NOTE (📝): apre un blocco note veloce. " +
+        "Usalo per scrivere appunti di turno (cose da ricordare, chiamate fatte, controlli da ripetere). " +
+        "È pensato per essere rapido, senza aprire altri programmi."
+    },
+    {
+      keys: ["tema", "colori", "🎨", "blu", "verde", "rosso"],
+      text:
+        "TEMA (🎨): cambia i colori del pannello (blu/verde/rosso). " +
+        "Serve per comfort visivo: di notte puoi scegliere il tema che stanca meno gli occhi. " +
+        "La scelta rimane anche se riapri la pagina."
+    },
+    {
+      keys: ["orologio", "clock", "ora"],
+      text:
+        "OROLOGIO: ti mostra l’ora in tempo reale. " +
+        "Sembra banale, ma in centrale è utile per annotare eventi, chiamate e tempi senza cambiare finestra."
+    },
+    {
+      keys: ["led", "pallino", "connessione", "vpn"],
+      text:
+        "PALLINO/LED vicino al titolo: indica se la connessione di rete sembra OK. " +
+        "Verde = tutto ok. Rosso = potrebbe esserci un problema di rete oppure non sei sulla rete corretta."
+    },
+
+    // SINISTRA - Accessi rapidi
+    {
+      keys: ["outlook"],
+      text:
+        "OUTLOOK: apre la posta aziendale in una nuova scheda. " +
+        "Usalo per leggere e inviare email senza perdere tempo a cercare il link."
+    },
+    {
+      keys: ["onedrive", "sharepoint", "drive"],
+      text:
+        "ONEDRIVE: apre lo spazio file aziendale (documenti condivisi). " +
+        "Serve per trovare velocemente procedure, allegati, report e materiale di lavoro."
+    },
+    {
+      keys: ["nasav-net gpt", "gpt", "nasav gpt"],
+      text:
+        "NASAV-NET GPT: apre l’assistente NASAV (ChatGPT) in una nuova scheda. " +
+        "Ti aiuta con procedure, ricerca info e supporto operativo quando hai dubbi."
+    },
+
+    // SINISTRA - Operazioni
+    {
+      keys: ["riavvio cradle point", "cradle", "cradle point"],
+      text:
+        "RIAVVIO CRADLE POINT: ti porta alla pagina dove puoi gestire/riavviare i dispositivi Cradlepoint. " +
+        "Usalo quando un sito ha problemi e devi fare un riavvio controllato."
+    },
+    {
+      keys: ["bacheca", "bacheca operativa"],
+      text:
+        "BACHECA OPERATIVA: apre un modulo per inserire segnalazioni operative. " +
+        "È utile per lasciare traccia di un problema o comunicare info importanti al team."
+    },
+    {
+      keys: ["vsphere", "vcenter"],
+      text:
+        "VSPHERE: apre l’ambiente dove si gestiscono le macchine virtuali. " +
+        "Serve quando devi controllare lo stato di server/VM o fare verifiche su sistemi interni."
+    },
+    {
+      keys: ["rc control", "residence control"],
+      text:
+        "RC CONTROL: apre la piattaforma Residence Control. " +
+        "Serve per accedere rapidamente al gestionale/portale dedicato ai clienti che lo usano."
+    },
+    {
+      keys: ["collaboration"],
+      text:
+        "COLLABORATION: apre il portale Collaboration. " +
+        "È un accesso rapido per la parte collaborativa/gestionale prevista dal sistema."
+    },
+    {
+      keys: ["pcmr"],
+      text:
+        "PCMR: apre il portale PCMR. " +
+        "Usalo quando devi verificare o gestire attività legate a quel sistema senza cercare l’indirizzo."
+    },
+    {
+      keys: ["gams tv", "gams"],
+      text:
+        "GAMS TV: apre la pagina GAMS TV. " +
+        "È un accesso rapido per consultazioni/controlli quando serve."
+    },
+
+    // Incendio
+    {
+      keys: ["controllo incendio", "incendio", "sinerga", "alfe", "unico", "chiaravalli", "siit"],
+      text:
+        "CONTROLLO INCENDIO: qui scegli una sede dal menu (Sinerga, Alfe, Unico Lainate, ecc.). " +
+        "Quando selezioni una sede, si apre la pagina di controllo in una nuova scheda. " +
+        "Serve per verificare rapidamente lo stato degli impianti incendio."
+    },
+
+    // CENTRO
+    {
+      keys: ["meteo", "meteo ora", "temperatura", "vento", "umidità", "pressione"],
+      text:
+        "METEO (ora): ti mostra temperatura e condizioni attuali, più vento/umidità/pressione. " +
+        "Serve per avere un contesto immediato (utile quando ci sono neve, temporali, vento forte o criticità meteo)."
+    },
+    {
+      keys: ["sole", "alba", "tramonto"],
+      text:
+        "SOLE: ti indica alba e tramonto della zona. " +
+        "È utile per capire se è già buio o quanto manca, soprattutto quando devi valutare visibilità o condizioni esterne."
+    },
+    {
+      keys: ["mappa satellite", "mappa", "satellite (centro)"],
+      text:
+        "MAPPA SATELLITE (centro): ti mostra la zona su vista dall’alto. " +
+        "Puoi spostarti e zoomare. " +
+        "Serve per orientarti, localizzare la sede e avere un riferimento veloce sul territorio."
+    },
+    {
+      keys: ["prossime ore", "previsione", "ore"],
+      text:
+        "PROSSIME ORE: mostra l’andamento del meteo nelle ore successive (icone e temperatura). " +
+        "È utile per capire se sta arrivando pioggia/temporale/neve senza aprire altre app."
+    },
+    {
+      keys: ["tech news", "ticker", "notizie"],
+      text:
+        "TECH NEWS (barra in basso): è una striscia scorrevole con messaggi rapidi. " +
+        "Serve come promemoria/stato, senza distrarti dal lavoro. Non devi cliccare nulla."
+    },
+
+    // DESTRA
+    {
+      keys: ["event feed", "eventi", "feed"],
+      text:
+        "EVENT FEED: è il diario degli aggiornamenti in tempo reale. " +
+        "Qui compaiono messaggi di stato e piccoli eventi (es. 'meteo aggiornato', 'connessione OK'). " +
+        "Serve per capire cosa è cambiato senza doverlo ricordare a mente."
+    },
+    {
+      keys: ["prossimo turno", "turno", "turni"],
+      text:
+        "PROSSIMO TURNO: mostra il prossimo turno e gli operatori previsti. " +
+        "Si aggiorna automaticamente. " +
+        "Se vedi 'nessun turno futuro trovato', vuol dire che al momento non ci sono dati disponibili o non sono stati inseriti."
+    }
+  ];
+
+  function findReply(query){
+    const qq = (query||"").toLowerCase();
+    for(const item of KB){
+      for(const k of item.keys){
+        if(qq.includes(k)) return item.text;
+      }
+    }
+    return null;
+  }
+
+  // Comandi utili
+  if(s === "help" || s === "aiuto" || s === "?" || s.includes("lista") || s.includes("tutti i tasti")){
+    return "Ecco cosa posso spiegare:\n- " + INDEX.join("\n- ") + "\n\nScrivi ad esempio: 'spiega archivio password' oppure 'mappa 3d'.";
+  }
+
+  // Supporta anche "spiega X"
+  const cleaned = s.replace(/^spiega\s+/, "").trim();
+
+  const reply = findReply(cleaned) || findReply(s);
+  if(reply) return reply;
+
+  return shortIndex();
+}
+
+
+  function submit(text){
+    const q = (text||"").trim();
+    if(!q) return;
+    addMsg(q, "user");
+    addMsg(answer(q), "bot");
+  }
+
+  send.addEventListener('click', ()=> { submit(input.value); input.value=""; input.focus(); });
+  input.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); send.click(); }
+  });
+
+  portal.querySelectorAll('.help-chip').forEach(b=>{
+    b.addEventListener('click', ()=> submit(b.dataset.q || b.textContent));
+  });
+})();
+</script>
+
+
+
+
+
+<div class="intro-overlay" id="introOverlay" aria-label="Benvenuto assistente NASAV-NET">
+  <div class="intro-dim" id="introDim"></div>
+
+  <div class="intro-card" role="dialog" aria-modal="true">
+    <div class="intro-grid" aria-hidden="true"></div>
+    <div class="intro-scan" aria-hidden="true"></div>
+
+    <div class="intro-top">
+      <div class="intro-title">🤖 ASSISTENTE VIRTUALE</div>
+      <button class="intro-close" id="introClose" type="button">✕</button>
+    </div>
+
+    <div class="intro-body">
+      <div class="intro-robot" aria-hidden="true">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="iRbBody" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(255,255,255,.20)"/>
+              <stop offset="55%" stop-color="rgba(255,255,255,.07)"/>
+              <stop offset="100%" stop-color="rgba(0,0,0,.30)"/>
+            </linearGradient>
+            <radialGradient id="iRbGlow" cx="50%" cy="35%" r="70%">
+              <stop offset="0%" stop-color="rgba(0,230,255,.60)"/>
+              <stop offset="55%" stop-color="rgba(0,230,255,.22)"/>
+              <stop offset="100%" stop-color="rgba(0,230,255,0)"/>
+            </radialGradient>
+          </defs>
+          <circle cx="32" cy="30" r="22" fill="url(#iRbGlow)" opacity=".90"/>
+          <g class="rb-antenna">
+            <rect x="31" y="7" width="2" height="9" rx="1" fill="rgba(232,250,255,.78)"/>
+            <circle class="rb-antenna-dot" cx="32" cy="7" r="3.5" fill="rgba(0,230,255,.98)"/>
+          </g>
+          <rect x="14" y="14" width="36" height="32" rx="10" fill="url(#iRbBody)"
+                stroke="rgba(0,230,255,.30)" stroke-width="2"/>
+          <rect x="18" y="18" width="28" height="24" rx="9" fill="rgba(0,0,0,.22)"
+                stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+          <g class="rb-eyes">
+            <circle class="rb-eye" cx="26" cy="30" r="4.4" fill="rgba(0,230,255,.98)"/>
+            <circle class="rb-eye" cx="38" cy="30" r="4.4" fill="rgba(0,230,255,.98)"/>
+            <circle cx="24.6" cy="28.6" r="1.2" fill="rgba(255,255,255,.85)"/>
+            <circle cx="36.6" cy="28.6" r="1.2" fill="rgba(255,255,255,.85)"/>
+            <rect class="rb-lid" x="20.5" y="25.5" width="11" height="9" rx="4.5" fill="rgba(0,0,0,.22)"/>
+            <rect class="rb-lid" x="32.5" y="25.5" width="11" height="9" rx="4.5" fill="rgba(0,0,0,.22)"/>
+          </g>
+          <path d="M25 38 Q32 42 39 38" fill="none" stroke="rgba(232,250,255,.82)" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <div>
+        <div class="intro-text">
+          Ciao! Sono il tuo assistente virtuale.
+          Se hai bisogno di aiuto per capire come funziona questa pagina,
+          clicca in alto a destra sul robot 🤖!
+        </div>
+        <div class="intro-sub">
+          (Puoi chiedermi “spiega” + il nome di un tasto, ad esempio: <b>spiega mappe 3d</b> oppure <b>spiega archivio password</b>.)
+        </div>
+      </div>
+    </div>
+
+    <div class="intro-actions">
+      <button class="intro-btn" id="introLater" type="button">Ok, ho capito</button>
+      <button class="intro-btn primary" id="introOpenHelp" type="button">Apri assistente 🤖</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+(function(){
+  const overlay = document.getElementById('introOverlay');
+  if(!overlay) return;
+
+  const dim = document.getElementById('introDim');
+  const close = document.getElementById('introClose');
+  const later = document.getElementById('introLater');
+  const openHelp = document.getElementById('introOpenHelp');
+
+  function hide(){
+    overlay.classList.remove('open');
+  }
+  function show(){
+    overlay.classList.add('open');
+  }
+// Piccolo delay per far caricare tutto
+  window.addEventListener('load', ()=>{
+    show();
+  }, { once:true });
+
+  dim?.addEventListener('click', hide);
+  close?.addEventListener('click', hide);
+  later?.addEventListener('click', hide);
+
+  openHelp?.addEventListener('click', ()=>{
+    hide();
+    const btn = document.getElementById('helpToggle');
+    if(btn) btn.click();
+  });
+
+  document.addEventListener('keydown', (e)=>{
+    if(!overlay.classList.contains('open')) return;
+    if(e.key === 'Escape') hide();
+    if(e.key === 'Enter') hide();
+  });
+})();
+</script>
+
+</body>
+</html>
